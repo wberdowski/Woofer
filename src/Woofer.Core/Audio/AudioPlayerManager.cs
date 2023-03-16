@@ -1,17 +1,20 @@
 ﻿using Discord;
 using Discord.WebSocket;
+using Microsoft.Extensions.Logging;
 
 namespace Woofer.Core.Audio
 {
-    public class AudioPlayerManager
+    internal class AudioPlayerManager
     {
         public Dictionary<ulong, AudioPlayer?> AudioPlayers { get; set; }
         private readonly DiscordSocketClient _client;
+        private readonly ILogger<AudioPlayerManager> _logger;
 
-        public AudioPlayerManager(DiscordSocketClient client)
+        public AudioPlayerManager(DiscordSocketClient client, ILogger<AudioPlayerManager> logger)
         {
             AudioPlayers = new Dictionary<ulong, AudioPlayer?>();
             _client = client;
+            _logger = logger;
         }
 
         public async Task<AudioPlayer> RequestAudioPlayerAtChannel(ulong guildId, IVoiceChannel channel)
@@ -20,14 +23,14 @@ namespace Woofer.Core.Audio
             {
                 if (AudioPlayers.TryGetValue(guildId, out var player))
                 {
-                    //Program.Logger.Debug("Reusing AudioPlayerInstace.");
+                    _logger.LogDebug("Reusing AudioPlayerInstace.");
                     return player;
                 }
                 else
                 {
-                    //Program.Logger.Debug("Player connected, but no AudioPlayerInstace found.");
+                    _logger.LogDebug("Player connected, but no AudioPlayerInstace found.");
                     var audioClient = await channel.ConnectAsync(true);
-                    var audioPlayer = new AudioPlayer(channel, audioClient);
+                    var audioPlayer = new AudioPlayer(channel, audioClient, _logger);
 
                     AudioPlayers.Add(guildId, audioPlayer);
 
@@ -38,9 +41,9 @@ namespace Woofer.Core.Audio
             {
                 AudioPlayers.Remove(guildId);
 
-                //Program.Logger.Debug("Creating new AudioPlayerInstace.");
+                _logger.LogDebug("Creating new AudioPlayerInstace.");
                 var audioClient = await channel.ConnectAsync(true);
-                var audioPlayer = new AudioPlayer(channel, audioClient);
+                var audioPlayer = new AudioPlayer(channel, audioClient, _logger);
 
                 AudioPlayers.Add(guildId, audioPlayer);
 
@@ -62,13 +65,7 @@ namespace Woofer.Core.Audio
         {
             if (AudioPlayers.TryGetValue(guildId, out var player))
             {
-                if (player != null)
-                {
-                    await player.Stop();
-                    await player.AudioChannel.DisconnectAsync();
-                }
                 player?.Dispose();
-                player = null;
                 AudioPlayers.Remove(guildId);
             }
         }

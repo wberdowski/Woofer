@@ -2,9 +2,9 @@
 using Discord.Net;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using Serilog;
-using Serilog.Events;
+using System.Diagnostics;
 using System.Reflection;
 using Woofer.Core.Config;
 
@@ -25,11 +25,10 @@ namespace Woofer.Core
 
         private IServiceProvider CreateServices()
         {
-            var collection = new ServiceCollection()
-                .AddBotServices()
-                .AddBotModules();
+            var services = new ServiceCollection()
+                .AddBotServices();
 
-            return collection.BuildServiceProvider();
+            return services.BuildServiceProvider();
         }
 
         private static void Main(string[] args)
@@ -38,11 +37,12 @@ namespace Woofer.Core
         private async Task RunAsync(string[] args)
         {
             AppDomain.CurrentDomain.ProcessExit += OnApplicationExit;
+            Process.GetCurrentProcess().PriorityClass= ProcessPriorityClass.RealTime;
 
             SetupLogging();
 
             var assemblyName = Assembly.GetExecutingAssembly().GetName();
-            _logger.Information($"Woofer v{assemblyName.Version?.ToString(3)}");
+            _logger.LogInformation($"Woofer v{assemblyName.Version?.ToString(3)}");
 
             await SetupConfig();
             SetupModules();
@@ -53,7 +53,7 @@ namespace Woofer.Core
 
         private void SetupLogging()
         {
-            _logger = _serviceProvider.GetRequiredService<ILogger>();
+            _logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
         }
 
         private async Task SetupConfig()
@@ -63,13 +63,13 @@ namespace Woofer.Core
 
             if (_configManager.Config == null)
             {
-                _logger.Error($"Configuration file corrupted.");
+                _logger.LogError($"Configuration file corrupted.");
                 return;
             }
 
             if (string.IsNullOrEmpty(_configManager.Config.BotToken))
             {
-                _logger.Error($"Bot token missing. Please input your discord bot token in the config.json file.");
+                _logger.LogError($"Bot token missing. Please input your discord bot token in the config.json file.");
                 return;
             }
         }
@@ -89,23 +89,23 @@ namespace Woofer.Core
         private void SetupModules()
         {
             _modules = (IEnumerable<IAppModule>)_serviceProvider.GetServices(typeof(IAppModule));
-            _logger.Debug($"{_modules.Count()} module(s) loaded.");
+            _logger.LogDebug($"{_modules.Count()} module(s) loaded.");
         }
 
         private Task Log(LogMessage msg)
         {
             var severity = msg.Severity switch
             {
-                LogSeverity.Critical => LogEventLevel.Fatal,
-                LogSeverity.Error => LogEventLevel.Error,
-                LogSeverity.Warning => LogEventLevel.Warning,
-                LogSeverity.Info => LogEventLevel.Information,
-                LogSeverity.Verbose => LogEventLevel.Verbose,
-                LogSeverity.Debug => LogEventLevel.Debug,
-                _ => LogEventLevel.Information
+                LogSeverity.Critical => LogLevel.Critical,
+                LogSeverity.Error => LogLevel.Error,
+                LogSeverity.Warning => LogLevel.Warning,
+                LogSeverity.Info => LogLevel.Information,
+                LogSeverity.Verbose => LogLevel.Trace,
+                LogSeverity.Debug => LogLevel.Debug,
+                _ => LogLevel.Information
             };
 
-            _logger.Write(severity, msg.Exception, "[{Source}] {Message}", msg.Source, msg.Message);
+            _logger.Log(severity, msg.Exception, "[{Source}] {Message}", msg.Source, msg.Message);
             return Task.CompletedTask;
         }
 
@@ -127,7 +127,7 @@ namespace Woofer.Core
             catch (HttpException exception)
             {
                 var json = JsonConvert.SerializeObject(exception.Errors, Formatting.Indented);
-                _logger.Error(json);
+                _logger.LogError(json);
             }
         }
 

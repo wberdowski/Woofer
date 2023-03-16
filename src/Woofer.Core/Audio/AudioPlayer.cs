@@ -1,187 +1,83 @@
 ﻿using Discord;
 using Discord.Audio;
-using System.Diagnostics;
-using System.Globalization;
-using System.Runtime.InteropServices;
+using Microsoft.Extensions.Logging;
+using Un4seen.Bass;
+using Un4seen.Bass.AddOn.WebM;
 using Woofer.Core.Common;
 
 namespace Woofer.Core.Audio
 {
-    public class AudioPlayer : IDisposable
+    internal class AudioPlayer : IDisposable
     {
         public IAudioChannel AudioChannel { get; }
         public IAudioClient AudioClient { get; }
+        public ITrack? CurrentTrack { get; private set; }
         public List<ITrack> TrackQueue { get; private set; }
-        public Action<AudioPlayer, TrackMessageEventArgs> TrackEnqueued;
-        public Action<AudioPlayer> PlaybackPaused;
-        public Action<AudioPlayer, TrackMessageEventArgs> TrackUpdated;
 
         private AudioOutStream _outputStream;
         private CancellationTokenSource _cts;
-        private Guid _guid;
         private Task? _playbackTask;
-        private const float Volume = 0.5f;
+        private readonly ILogger _logger;
+        private byte[] _sampleBuffer = null; // our local buffer
+        private int _handle;
+        private int _bytesread;
+        private bool _isPaused;
 
-        public AudioPlayer(IVoiceChannel audioChannel, IAudioClient audioClient)
+        public AudioPlayer(IVoiceChannel audioChannel, IAudioClient audioClient, ILogger<AudioPlayerManager> logger)
         {
             AudioChannel = audioChannel;
             AudioClient = audioClient;
+            _logger = logger;
             TrackQueue = new List<ITrack>();
 
             _outputStream = audioClient.CreatePCMStream(
                 AudioApplication.Music,
-                null,
-                1000,
-                0
+                packetLoss: 100 // TODO
             );
 
-            _guid = Guid.NewGuid();
-        }
+            Bass.BASS_Init(-1, -1, BASSInit.BASS_DEVICE_NOSPEAKER, IntPtr.Zero);
+            Bass.BASS_PluginLoad("bassopus.dll");
 
-        public async Task Enqueue(ITrack track, IUserMessage? reply = null)
-        {
-            TrackQueue.Add(track);
+            var bassStatus = Bass.BASS_ErrorGetCode();
 
-            if (TrackQueue.Count == 1)
+            if (bassStatus != BASSError.BASS_OK)
             {
-                await PlayCurrentTrack(true, reply);
-            }
-            else
-            {
-                TrackEnqueued?.Invoke(this, new TrackMessageEventArgs(track, reply));
+                throw new Exception("BASS: " + bassStatus);
             }
         }
 
-        // TODO: Pause current song, play new song, restore previously playing song
-        public async Task PlayNow(ITrack track)
-        {
-            if (TrackQueue.First() != track)
-            {
-                TrackQueue.Remove(track);
-
-                await Stop();
-                await RemoveCurrentTrack();
-                TrackQueue.Insert(0, track);
-                await PlayCurrentTrack();
-            }
-        }
-
-        public async Task ClearQueue()
-        {
-            await Stop();
-
-            TrackQueue.Clear();
-        }
-
-        public async Task RemoveTrack(int index)
-        {
-            index--;
-
-            if (TrackQueue.Any() && index >= 0)
-            {
-                if (index == 0)
-                {
-                    await Skip();
-                    return;
-                }
-                else if (TrackQueue.Count > index)
-                {
-                    TrackQueue.RemoveAt(index);
-                    return;
-                }
-            }
-
-            // Specified index is out of range
-        }
-
-        public async Task MoveTrack(int index, int destPos)
-        {
-            index--;
-            destPos--;
-
-            if (index > 0 && destPos > 0 && index != destPos && destPos < TrackQueue.Count)
-            {
-                var track = TrackQueue[index];
-                TrackQueue.RemoveAt(index);
-                TrackQueue.Insert(destPos, track);
-            }
-
-            await Task.CompletedTask;
-        }
-
-        public async Task PlayNext(ITrack track)
-        {
-            if (TrackQueue.First() != track)
-            {
-                TrackQueue.Remove(track);
-                TrackQueue.Insert(1, track);
-            }
-
-            await Task.CompletedTask;
-        }
-
-        public async Task RemoveTrack(ITrack track)
-        {
-            if (TrackQueue.First() == track)
-            {
-                await Skip();
-            }
-            else
-            {
-                TrackQueue.Remove(track);
-            }
-        }
-
-        public async Task Skip(bool forcedByUser = false)
-        {
-            await Stop();
-            await RemoveCurrentTrack();
-            await PlayCurrentTrack(forcedByUser);
-        }
-
-        private async Task RemoveCurrentTrack()
+        public void Enqueue(ITrack track, IUserMessage? reply = null)
         {
             lock (TrackQueue)
             {
-                TrackQueue.RemoveAt(0);
-            }
+                TrackQueue.Add(track);
 
-            await Task.CompletedTask;
-        }
-
-        private async Task PlayCurrentTrack(bool forcedByUser = true, IUserMessage? reply = null)
-        {
-            if (TrackQueue.Count > 0)
-            {
-                var track = TrackQueue.First();
-
-                _cts = new CancellationTokenSource();
-                _playbackTask = PlayAsync(track, _cts.Token);
-                _playbackTask?.Exception?.Handle(HandleException);
-
-                if (forcedByUser)
+                if (TrackQueue.Count == 1)
                 {
-                    TrackUpdated?.Invoke(this, new TrackMessageEventArgs(track, reply));
+                    ConsumeAndPlay();
+                    return;
                 }
             }
-
-            await Task.CompletedTask;
-        }
-
-        private bool HandleException(Exception ex)
-        {
-            //Logger.Error("[Play] {Message}", ex);
-
-            return true;
         }
 
         public async Task Pause()
         {
-            //Logger.Information("Track paused - " + _guid);
+            if (_playbackTask != null)
+            {
+                _isPaused = true;
+            }
 
-            await Stop();
+            await Task.CompletedTask;
+        }
 
-            PlaybackPaused?.Invoke(this);
+        public async Task Resume()
+        {
+            if (_playbackTask != null)
+            {
+                _isPaused = false;
+            }
+
+            await Task.CompletedTask;
         }
 
         public async Task Stop()
@@ -191,90 +87,91 @@ namespace Woofer.Core.Audio
             {
                 await _playbackTask;
             }
-
-            _outputStream?.Clear();
-            _outputStream?.Flush();
         }
 
-        private async Task PlayAsync(ITrack track, CancellationToken token)
-        {
-            //Logger.Information("Play - " + track.Title);
-
-            using (var ffmpeg = CreateStream(track.AudioSource.Url))
-            {
-                if (ffmpeg != null)
-                {
-                    using (var inputStream = ffmpeg.StandardOutput.BaseStream)
-                    {
-                        try
-                        {
-                            await inputStream.CopyToAsync(_outputStream, token);
-
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            //Logger.Information("Playback cancelled: " + track.Title);
-                        }
-                        finally
-                        {
-                            await _outputStream.FlushAsync();
-                            ffmpeg.Kill();
-                            //Logger.Information("Track finished: " + track.Title);
-                            _playbackTask = null;
-                            await Skip(false);
-                        }
-                    }
-                }
-                else
-                {
-                    //Logger.Error("FFmpeg process could not be created");
-                }
-            }
-        }
-
-        private Process? CreateStream(string path)
-        {
-            var ffmpegPath = "ffmpeg";
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-            {
-                ffmpegPath = "/usr/bin/ffmpeg";
-            }
-
-            var proc = Process.Start(new ProcessStartInfo
-            {
-                FileName = ffmpegPath,
-                Arguments = $"-hide_banner -loglevel error -reconnect 1 -reconnect_at_eof 1 -reconnect_streamed 1 -reconnect_delay_max 2 -i \"{path}\" -filter:a \"volume = {Volume.ToString("0.#", CultureInfo.InvariantCulture)}\" -ac 2 -f wav -ar 48000 pipe:",
-                UseShellExecute = false,
-                RedirectStandardOutput = true
-            });
-
-            if (proc != null && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                proc.PriorityClass = ProcessPriorityClass.RealTime;
-            }
-
-            return proc;
-        }
-
-        public async void Dispose()
+        public async Task Skip()
         {
             await Stop();
-            TrackQueue = null;
-            try
-            {
-                _outputStream?.Close();
-                _outputStream?.Dispose();
-            }
-            catch (ObjectDisposedException)
-            {
 
+            if (TrackQueue.Any())
+            {
+                ConsumeAndPlay();
             }
         }
 
-        ~AudioPlayer()
+        private void ConsumeAndPlay()
         {
-            Dispose();
+            lock (TrackQueue)
+            {
+                if (!TrackQueue.Any())
+                {
+                    throw new InvalidOperationException("Queue is empty.");
+                }
+
+                var track = TrackQueue.First();
+                TrackQueue.RemoveAt(0);
+
+                _cts = new CancellationTokenSource();
+                _playbackTask = StreamTrack(track, _cts.Token);
+                _playbackTask.Exception?.Handle(HandleException);
+            }
+        }
+
+        private bool HandleException(Exception ex)
+        {
+            _logger.LogError("[Play] {Message}", ex);
+            return true;
+        }
+
+        private async Task StreamTrack(ITrack track, CancellationToken token)
+        {
+            CurrentTrack = track;
+            _isPaused = false;
+
+            try
+            {
+                _handle = BassWebM.BASS_WEBM_StreamCreateURL(track.AudioSource.Url, 0, BASSFlag.BASS_STREAM_DECODE | BASSFlag.BASS_STREAM_PRESCAN, null, IntPtr.Zero, 0);
+                _sampleBuffer = new byte[(int)Bass.BASS_ChannelSeconds2Bytes(_handle, 0.1f)];
+
+                while (Bass.BASS_ChannelIsActive(_handle) == BASSActive.BASS_ACTIVE_PLAYING)
+                {
+                    while (_isPaused)
+                    {
+                        await Task.Delay(1);
+                    };
+
+                    token.ThrowIfCancellationRequested();
+
+                    _bytesread = Bass.BASS_ChannelGetData(_handle, _sampleBuffer, _sampleBuffer.Length);
+
+                    if (_bytesread != 0)
+                    {
+                        _outputStream.Write(_sampleBuffer, 0, _bytesread);
+                    }
+                }
+
+                var bassStatus = Bass.BASS_ErrorGetCode();
+
+                if (bassStatus != BASSError.BASS_OK)
+                {
+                    _logger.LogError(bassStatus.ToString());
+                    return;
+                }
+            }
+            finally
+            {
+                await _outputStream.FlushAsync();
+                BassWebM.FreeMe();
+            }
+
+            _logger.LogDebug($"Song finished: {track.Title}");
+
+            CurrentTrack = null;
+        }
+
+        public void Dispose()
+        {
+            // TODO
         }
     }
 }
