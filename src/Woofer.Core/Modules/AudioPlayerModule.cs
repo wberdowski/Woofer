@@ -27,6 +27,12 @@ namespace Woofer.Core.Modules
             var properties = new List<ApplicationCommandProperties>
             {
                 new SlashCommandBuilder()
+                    .WithName("play")
+                    .WithDescription("Play an audio track from YouTube.")
+                    .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true)
+                    .Build(),
+
+                 new SlashCommandBuilder()
                     .WithName("p")
                     .WithDescription("Play an audio track from YouTube.")
                     .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true)
@@ -40,6 +46,21 @@ namespace Woofer.Core.Modules
                 new SlashCommandBuilder()
                     .WithName("skip")
                     .WithDescription("Skip current song and play next in the queue.")
+                    .Build(),
+
+                new SlashCommandBuilder()
+                    .WithName("s")
+                    .WithDescription("Skip current song and play next in the queue.")
+                    .Build(),
+
+                new SlashCommandBuilder()
+                    .WithName("q")
+                    .WithDescription("Show songs in the queue.")
+                    .Build(),
+
+                new SlashCommandBuilder()
+                    .WithName("queue")
+                    .WithDescription("Show songs in the queue.")
                     .Build(),
 
                 new SlashCommandBuilder()
@@ -60,9 +81,10 @@ namespace Woofer.Core.Modules
         {
             var task = command.CommandName switch
             {
-                "p" => HandlePlayCommand(command),
+                "play" or "p" => HandlePlayCommand(command),
                 "stop" => HandleStopCommand(command),
-                "skip" => HandleSkipCommand(command),
+                "skip" or "s" => HandleSkipCommand(command),
+                "queue" or "q" => HandleQueueCommand(command),
                 "pause" => HandlePauseCommand(command),
                 "resume" => HandleResumeCommand(command),
                 _ => Task.CompletedTask
@@ -92,7 +114,8 @@ namespace Woofer.Core.Modules
                    .Build();
 
                 await command.RespondAsync(
-                   embeds: new Embed[] { embed }
+                   embeds: new Embed[] { embed },
+                   ephemeral: true
                );
             }
 
@@ -128,9 +151,9 @@ namespace Woofer.Core.Modules
                     .Build();
 
                 var components = new ComponentBuilder()
-                    .WithButton("⏭️ Now", $"{messageId}-play-now-button", ButtonStyle.Primary)
-                    .WithButton("➡️ Next", $"{messageId}-play-next-button", ButtonStyle.Secondary)
-                    .WithButton("❌ Delete", $"{messageId}-delete", ButtonStyle.Danger)
+                    .WithButton("Now", $"{messageId}-play-now-button", ButtonStyle.Primary)
+                    .WithButton("Next", $"{messageId}-play-next-button", ButtonStyle.Secondary)
+                    .WithButton("❌", $"{messageId}-delete", ButtonStyle.Danger)
                     .Build();
 
                 await command.ModifyOriginalResponseAsync((p) =>
@@ -248,6 +271,29 @@ namespace Woofer.Core.Modules
             );
 
             await resumeTask;
+        }
+
+        private async Task HandleQueueCommand(SocketSlashCommand command)
+        {
+            if (!TryGetActivePlayer(command, out var audioPlayer))
+            {
+                await SendNoActivePlayerError(command);
+                return;
+            }
+
+            var songsList = string.Join("\n", audioPlayer.TrackQueue.Select(song => song.Title));
+
+            var embed = new EmbedBuilder()
+                .WithAuthor($"☰ Queue")
+                .WithTitle(audioPlayer.CurrentTrack.Title)
+                .WithUrl(audioPlayer.CurrentTrack.Url)
+                .WithDescription(songsList)
+                .WithColor(Color.DarkPurple)
+                .Build();
+
+            await command.RespondAsync(
+                embeds: new Embed[] { embed }
+            );
         }
 
         private bool TryGetActivePlayer(IDiscordInteraction context, out AudioPlayer audioPlayer)

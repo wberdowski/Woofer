@@ -9,12 +9,14 @@ namespace Woofer.Core.Audio
         public Dictionary<ulong, AudioPlayer?> AudioPlayers { get; set; }
         private readonly DiscordSocketClient _client;
         private readonly ILogger<AudioPlayerManager> _logger;
+        private readonly IServiceProvider _serviceProvider;
 
-        public AudioPlayerManager(DiscordSocketClient client, ILogger<AudioPlayerManager> logger)
+        public AudioPlayerManager(DiscordSocketClient client, ILogger<AudioPlayerManager> logger, IServiceProvider serviceProvider)
         {
             AudioPlayers = new Dictionary<ulong, AudioPlayer?>();
             _client = client;
             _logger = logger;
+            _serviceProvider = serviceProvider;
         }
 
         public async Task<AudioPlayer> RequestAudioPlayerAtChannel(ulong guildId, IVoiceChannel channel)
