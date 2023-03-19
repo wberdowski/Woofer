@@ -23,6 +23,8 @@ namespace Woofer.Core.Audio
         private int _bytesread;
         private bool _isPaused;
 
+        private Guid id = Guid.NewGuid();
+
         public AudioPlayer(IVoiceChannel audioChannel, IAudioClient audioClient, ILogger<AudioPlayerManager> logger)
         {
             AudioChannel = audioChannel;
@@ -48,36 +50,28 @@ namespace Woofer.Core.Audio
 
         public void Enqueue(ITrack track, IUserMessage? reply = null)
         {
-            lock (TrackQueue)
-            {
-                TrackQueue.Add(track);
+            TrackQueue.Add(track);
 
-                if (TrackQueue.Count == 1)
-                {
-                    ConsumeAndPlay();
-                    return;
-                }
+            if (CurrentTrack == null && TrackQueue.Count == 1)
+            {
+                ConsumeAndPlay();
             }
         }
 
-        public async Task Pause()
+        public void Pause()
         {
             if (_playbackTask != null)
             {
                 _isPaused = true;
             }
-
-            await Task.CompletedTask;
         }
 
-        public async Task Resume()
+        public void Resume()
         {
             if (_playbackTask != null)
             {
                 _isPaused = false;
             }
-
-            await Task.CompletedTask;
         }
 
         public async Task Stop()
@@ -101,20 +95,17 @@ namespace Woofer.Core.Audio
 
         private void ConsumeAndPlay()
         {
-            lock (TrackQueue)
+            if (!TrackQueue.Any())
             {
-                if (!TrackQueue.Any())
-                {
-                    throw new InvalidOperationException("Queue is empty.");
-                }
-
-                var track = TrackQueue.First();
-                TrackQueue.RemoveAt(0);
-
-                _cts = new CancellationTokenSource();
-                _playbackTask = StreamTrack(track, _cts.Token);
-                _playbackTask.Exception?.Handle(HandleException);
+                throw new InvalidOperationException("Queue is empty.");
             }
+
+            var track = TrackQueue.First();
+            TrackQueue.RemoveAt(0);
+
+            _cts = new CancellationTokenSource();
+            _playbackTask = Task.Run(() => StreamTrack(track, _cts.Token));
+            _playbackTask.Exception?.Handle(HandleException);
         }
 
         private bool HandleException(Exception ex)

@@ -193,7 +193,7 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            await audioPlayer.Stop();
+            var stopTask = audioPlayer.Stop();
 
             {
                 var embed = new EmbedBuilder()
@@ -205,6 +205,8 @@ namespace Woofer.Core.Modules
                     embeds: new Embed[] { embed }
                 );
             }
+
+            await stopTask;
         }
 
         private async Task HandleSkipCommand(SocketSlashCommand command)
@@ -237,7 +239,7 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            var pauseTask = audioPlayer.Pause();
+            audioPlayer.Pause();
 
             var embed = new EmbedBuilder()
                .WithAuthor($"⏸️ Pausing")
@@ -247,8 +249,6 @@ namespace Woofer.Core.Modules
             await command.RespondAsync(
                 embeds: new Embed[] { embed }
             );
-
-            await pauseTask;
         }
 
         private async Task HandleResumeCommand(SocketSlashCommand command)
@@ -259,7 +259,7 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            var resumeTask = audioPlayer.Resume();
+            audioPlayer.Resume();
 
             var embed = new EmbedBuilder()
                .WithAuthor($"▶️ Resuming")
@@ -269,8 +269,6 @@ namespace Woofer.Core.Modules
             await command.RespondAsync(
                 embeds: new Embed[] { embed }
             );
-
-            await resumeTask;
         }
 
         private async Task HandleQueueCommand(SocketSlashCommand command)
@@ -292,7 +290,8 @@ namespace Woofer.Core.Modules
                 .Build();
 
             await command.RespondAsync(
-                embeds: new Embed[] { embed }
+                embeds: new Embed[] { embed },
+                ephemeral: true
             );
         }
 
