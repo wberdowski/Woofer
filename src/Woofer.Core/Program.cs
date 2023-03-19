@@ -44,9 +44,17 @@ namespace Woofer.Core
             var assemblyName = Assembly.GetExecutingAssembly().GetName();
             _logger.LogInformation($"Woofer v{assemblyName.Version?.ToString(3)}");
 
-            await SetupConfig();
-            SetupModules();
-            await SetupDiscord();
+            try
+            {
+                await SetupConfig();
+                SetupModules();
+                await SetupDiscord();
+            } catch (Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                await Task.Delay(1);
+                return;
+            }
 
             await Task.Delay(Timeout.Infinite);
         }
@@ -63,14 +71,12 @@ namespace Woofer.Core
 
             if (_configManager.Config == null)
             {
-                _logger.LogError($"Configuration file corrupted.");
-                return;
+                throw new Exception($"Configuration file corrupted.");
             }
 
             if (string.IsNullOrEmpty(_configManager.Config.BotToken))
             {
-                _logger.LogError($"Bot token missing. Please input your discord bot token in the config.json file.");
-                return;
+                throw new Exception($"Bot token missing. Please input your discord bot token in the config.json file.");
             }
         }
 
