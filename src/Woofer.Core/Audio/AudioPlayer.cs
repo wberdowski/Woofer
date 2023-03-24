@@ -36,16 +36,6 @@ namespace Woofer.Core.Audio
                 AudioApplication.Music,
                 packetLoss: 100 // TODO
             );
-
-            Bass.BASS_Init(-1, -1, BASSInit.BASS_DEVICE_NOSPEAKER, IntPtr.Zero);
-            Bass.BASS_PluginLoad("bassopus.dll");
-
-            var bassStatus = Bass.BASS_ErrorGetCode();
-
-            if (bassStatus != BASSError.BASS_OK)
-            {
-                throw new Exception("BASS: " + bassStatus);
-            }
         }
 
         public void Enqueue(ITrack track, IUserMessage? reply = null)
@@ -104,6 +94,7 @@ namespace Woofer.Core.Audio
             TrackQueue.RemoveAt(0);
 
             _cts = new CancellationTokenSource();
+
             _playbackTask = Task.Run(() => StreamTrack(track, _cts.Token));
             _playbackTask.Exception?.Handle(HandleException);
         }
