@@ -1,7 +1,6 @@
 ﻿using Discord;
 using Discord.Audio;
 using Discord.WebSocket;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Un4seen.Bass;
 
@@ -46,7 +45,7 @@ namespace Woofer.Core.Audio
                 _logger.LogDebug($"Player connected, but no {nameof(AudioPlayer)} found.");
                 audioClient = await channel.ConnectAsync(true);
 
-                audioPlayer = new AudioPlayer(channel, audioClient, _logger);
+                audioPlayer = new AudioPlayer(audioClient, _logger);
                 AudioPlayers.Add(guildId, audioPlayer);
 
                 return audioPlayer;
@@ -56,7 +55,7 @@ namespace Woofer.Core.Audio
 
             _logger.LogDebug($"Creating new {nameof(AudioPlayer)}.");
             audioClient = await channel.ConnectAsync(true);
-            audioPlayer = new AudioPlayer(channel, audioClient, _logger);
+            audioPlayer = new AudioPlayer(audioClient, _logger);
 
             AudioPlayers.Add(guildId, audioPlayer);
 

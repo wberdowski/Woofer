@@ -1,7 +1,6 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
-using System.ComponentModel;
 using Woofer.Core.Audio;
 using Woofer.Core.Common;
 using YoutubeExplode;
@@ -13,7 +12,7 @@ namespace Woofer.Core.Modules
         private readonly YoutubeClient _ytClient;
         private readonly AudioPlayerManager _audioPlayerManager;
         private readonly ILogger _logger;
-        private Guid _lastMessageId;
+        private Guid? _lastMessageId;
 
         public AudioPlayerModule(YoutubeClient client, AudioPlayerManager audioPlayerManager, ILogger<AudioPlayerModule> logger)
         {
@@ -32,12 +31,6 @@ namespace Woofer.Core.Modules
                     .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true)
                     .Build(),
 
-                 new SlashCommandBuilder()
-                    .WithName("p")
-                    .WithDescription("Play an audio track from YouTube.")
-                    .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true)
-                    .Build(),
-
                 new SlashCommandBuilder()
                     .WithName("stop")
                     .WithDescription("Stop currently playing song.")
@@ -49,13 +42,8 @@ namespace Woofer.Core.Modules
                     .Build(),
 
                 new SlashCommandBuilder()
-                    .WithName("s")
+                    .WithName("next")
                     .WithDescription("Skip current song and play next in the queue.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("q")
-                    .WithDescription("Show songs in the queue.")
                     .Build(),
 
                 new SlashCommandBuilder()
@@ -81,10 +69,10 @@ namespace Woofer.Core.Modules
         {
             var task = command.CommandName switch
             {
-                "play" or "p" => HandlePlayCommand(command),
+                "play" => HandlePlayCommand(command),
                 "stop" => HandleStopCommand(command),
-                "skip" or "s" => HandleSkipCommand(command),
-                "queue" or "q" => HandleQueueCommand(command),
+                "skip" or "next" => HandleSkipCommand(command),
+                "queue" => HandleQueueCommand(command),
                 "pause" => HandlePauseCommand(command),
                 "resume" => HandleResumeCommand(command),
                 _ => Task.CompletedTask
@@ -97,13 +85,17 @@ namespace Woofer.Core.Modules
         {
             if (component.Data.CustomId == $"{_lastMessageId}-play-now-button")
             {
-                //await component.RespondAsync("oki doki");
                 await component.DeferAsync();
             }
         }
 
         private async Task HandlePlayCommand(SocketSlashCommand command)
         {
+            if (command.GuildId == null)
+            {
+                return;
+            }
+
             var messageId = Guid.NewGuid();
             var searchQuery = command.Data.Options.First().Value.ToString();
 
@@ -125,7 +117,10 @@ namespace Woofer.Core.Modules
             var manifest = await _ytClient.Videos.Streams.GetManifestAsync(result.Url);
 
             // Select best quality
-            var audioSource = manifest.GetAudioOnlyStreams().Where(x => x.AudioCodec == "opus").OrderByDescending(x => x.Bitrate.KiloBitsPerSecond).First();
+            var audioSource = manifest.GetAudioOnlyStreams()
+                .Where(x => x.AudioCodec == "opus")
+                .OrderByDescending(x => x.Bitrate.KiloBitsPerSecond)
+                .First();
 
             var track = new WebSearchResult(
                 video.Title,
@@ -167,20 +162,11 @@ namespace Woofer.Core.Modules
             if (channel == null)
             {
                 await command.RespondAsync("User not in the channel.");
-                //await BasicCommandFailureReply("User must be in a voice channel, or a voice channel must be passed as an argument.", "Error");
                 return;
             }
 
-            // Join voice channel
-            try
-            {
-                var audioPlayer = await _audioPlayerManager.RequestAudioPlayerAtChannel((ulong)command.GuildId, channel);
-                audioPlayer.Enqueue(track);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex.ToString());
-            }
+            var audioPlayer = await _audioPlayerManager.RequestAudioPlayerAtChannel((ulong)command.GuildId, channel);
+            audioPlayer.Enqueue(track);
 
             _lastMessageId = messageId;
         }
@@ -259,7 +245,7 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            audioPlayer.Resume();
+            audioPlayer.Unpause();
 
             var embed = new EmbedBuilder()
                .WithAuthor($"▶️ Resuming")
@@ -279,15 +265,31 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            var songsList = string.Join("\n", audioPlayer.TrackQueue.Select(song => song.Title));
+            var songsList = string.Join("\n", audioPlayer.TrackQueue.Select((song, i) => $"**{i + 1}** - {song.Title} - [{song.Duration}]"));
+            var totalDuration = TimeSpan.FromSeconds(
+                (audioPlayer.CurrentTrack?.Duration?.TotalSeconds ?? 0) +
+                audioPlayer.TrackQueue.Sum(s => s.Duration?.TotalSeconds ?? 0)
+            );
 
-            var embed = new EmbedBuilder()
+            var embedBuilder = new EmbedBuilder()
                 .WithAuthor($"☰ Queue")
-                .WithTitle(audioPlayer.CurrentTrack.Title)
-                .WithUrl(audioPlayer.CurrentTrack.Url)
-                .WithDescription(songsList)
+                .WithDescription($"{songsList}")
                 .WithColor(Color.DarkPurple)
-                .Build();
+                .WithFooter($"Total duration: {totalDuration}");
+
+            if (audioPlayer.CurrentTrack != null)
+            {
+                embedBuilder = embedBuilder
+                    .WithTitle($"**🎵 NOW PLAYING**\n```{audioPlayer.CurrentTrack.Title} [{audioPlayer.CurrentTrack.Duration}]```")
+                    .WithUrl(audioPlayer.CurrentTrack.Url);
+            }
+            else
+            {
+                embedBuilder = embedBuilder
+                    .WithTitle($"❌ No song is currently playing");
+            }
+
+            var embed = embedBuilder.Build();
 
             await command.RespondAsync(
                 embeds: new Embed[] { embed },

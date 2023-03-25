@@ -20,5 +20,10 @@ namespace Woofer.Core.Common
             ThumbnailUrl = thumbnailUrl;
             AudioSource = audioSource;
         }
+
+        public override string ToString()
+        {
+            return $"{Title}, {Duration}";
+        }
     }
 }

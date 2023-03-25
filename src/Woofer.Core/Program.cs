@@ -4,6 +4,7 @@ using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using System;
 using System.Diagnostics;
 using System.Reflection;
 using Woofer.Core.Config;
@@ -37,7 +38,7 @@ namespace Woofer.Core
         private async Task RunAsync(string[] args)
         {
             AppDomain.CurrentDomain.ProcessExit += OnApplicationExit;
-            Process.GetCurrentProcess().PriorityClass= ProcessPriorityClass.RealTime;
+            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
 
             SetupLogging();
 
@@ -49,7 +50,8 @@ namespace Woofer.Core
                 await SetupConfig();
                 SetupModules();
                 await SetupDiscord();
-            } catch (Exception ex)
+            }
+            catch (Exception ex)
             {
                 _logger.LogError(ex.Message);
                 await Task.Delay(1);
@@ -137,24 +139,51 @@ namespace Woofer.Core
             }
         }
 
-        private Task OnButtonExecuted(SocketMessageComponent component)
+        private async Task OnButtonExecuted(SocketMessageComponent component)
         {
-            foreach (var module in _modules)
+            await Task.Run(() =>
             {
-                module.HandleButtonExecuted(component);
-            }
-
-            return Task.CompletedTask;
+                Parallel.ForEach(_modules, async module =>
+                {
+                    try
+                    {
+                        await module.HandleButtonExecuted(component);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, ex.Message);
+                    }
+                });
+            });
         }
 
-        private Task OnSlashCommandExecuted(SocketSlashCommand command)
+        private async Task OnSlashCommandExecuted(SocketSlashCommand command)
         {
-            foreach (var module in _modules)
+            await Task.Run(() =>
             {
-                module.HandleCommand(command);
-            }
+                Parallel.ForEach(_modules, async module =>
+                {
+                    try
+                    {
+                        await module.HandleCommand(command);
+                    }
+                    catch (Exception ex)
+                    {
+                        var embed = new EmbedBuilder()
+                            .WithAuthor($"❌ An internal error occured. Please contact bot's administrator.")
+                            .WithColor(Color.Red)
+                            .Build();
 
-            return Task.CompletedTask;
+                        await command.ModifyOriginalResponseAsync((m) =>
+                        {
+                            m.Components = null;
+                            m.Embed = embed;
+                        });
+
+                        _logger.LogError(ex, ex.Message);
+                    }
+                });
+            });
         }
 
         private async void OnApplicationExit(object? sender, EventArgs e)
