@@ -25,7 +25,7 @@ namespace Woofer.Core
                     {
                         o.UseUtcTimestamp = true;
                         o.TimestampFormat = "HH:mm:ss ";
-                        o.SingleLine = true;
+                        o.SingleLine = false;
                     });
                 })
                 .AddConfig()

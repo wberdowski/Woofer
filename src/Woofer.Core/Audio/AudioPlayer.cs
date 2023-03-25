@@ -11,18 +11,18 @@ namespace Woofer.Core.Audio
     {
         public ITrack? CurrentTrack => _currentTrack;
         public List<ITrack> TrackQueue => _trackQueue;
-        static BASSError BassStatus => Bass.BASS_ErrorGetCode();
 
-        readonly ILogger _logger;
-        readonly AudioOutStream _outputStream;
+        private readonly ILogger _logger;
+        private readonly AudioOutStream _outputStream;
         private readonly ArrayPool<byte> _pool;
-        CancellationTokenSource? _playbackCts;
-        Task? _playbackTask;
-        int _playbackHandle;
-        ManualResetEvent _isPaused = new(false);
-        ITrack? _currentTrack;
-        List<ITrack> _trackQueue = new();
-        volatile bool _disableAutoplay = false;
+        private CancellationTokenSource? _playbackCts;
+        private Task? _playbackTask;
+        private int _playbackHandle;
+        private readonly ManualResetEvent _isPaused = new(false);
+        private ITrack? _currentTrack;
+        private readonly List<ITrack> _trackQueue = new();
+        private volatile bool _disableAutoplay = false;
+        private volatile object _controlLock = new();
 
         public AudioPlayer(IAudioClient audioClient, ILogger<AudioPlayerManager> logger)
         {
@@ -34,70 +34,91 @@ namespace Woofer.Core.Audio
             _pool = ArrayPool<byte>.Create();
         }
 
-        public void Pause() => _isPaused.Reset();
-        public void Unpause()
+        public async Task Pause()
         {
-            _isPaused.Set();
-            _disableAutoplay = false;
+            lock (_controlLock)
+            {
+                _isPaused.Reset();
+            }
+
+            await Task.CompletedTask;
         }
 
-        void SetCurrentTrack(ITrack track) => _currentTrack = track;
-        void ClearCurrentTrack() => _currentTrack = null;
-
-        public void Enqueue(ITrack track)
+        public async Task Unpause()
         {
-            TrackQueue.Add(track);
-
-            if (_currentTrack == null && _trackQueue.Count == 1)
+            lock (_controlLock)
             {
-                TryConsumeAndPlay();
+                _isPaused.Set();
+                _disableAutoplay = false;
             }
+
+            await Task.CompletedTask;
+        }
+
+        public async Task Enqueue(ITrack track)
+        {
+            await Task.Run(() =>
+            {
+                lock (_controlLock)
+                {
+                    TrackQueue.Add(track);
+
+                    if (_currentTrack == null && _trackQueue.Count == 1)
+                    {
+                        TryConsumeAndPlay();
+                    }
+                }
+            });
         }
 
         public async Task Stop()
         {
-            _disableAutoplay = true;
-            _logger.LogDebug("STOP."); LogState();
-            _playbackCts?.Cancel();
-            _isPaused.Set();
+            lock (_controlLock)
+            {
+                _logger.LogDebug("STOP.");
 
-            await WaitForPlaybackTaskFinished();
+                _disableAutoplay = true;
+                _playbackCts?.Cancel();
+                _isPaused.Set();
+
+                WaitForPlaybackTaskFinished().Wait();
+            }
+
+            await Task.CompletedTask;
         }
 
         public async Task Skip()
         {
-            _disableAutoplay = true;
-            _logger.LogDebug("SKIP."); LogState();
-            _playbackCts?.Cancel();
-            _isPaused.Set();
+            lock (_controlLock)
+            {
+                _logger.LogDebug("SKIP.");
 
-            await WaitForPlaybackTaskFinished();
+                _disableAutoplay = true;
+                _playbackCts?.Cancel();
+                _isPaused.Set();
 
-            TryConsumeAndPlay();
+                WaitForPlaybackTaskFinished().Wait();
+
+                TryConsumeAndPlay();
+            }
+
+            await Task.CompletedTask;
         }
 
-        async Task WaitForPlaybackTaskFinished()
+        private void SetCurrentTrack(ITrack track) => _currentTrack = track;
+        private void ClearCurrentTrack() => _currentTrack = null;
+
+        private async Task WaitForPlaybackTaskFinished()
         {
             if (_playbackTask != null && !_playbackTask.IsCanceled && !_playbackTask.IsCompleted)
             {
-                _logger.LogDebug("Stopping task."); LogState();
+                _logger.LogDebug("Stopping task.");
                 await _playbackTask;
-                _logger.LogDebug("Task stopped."); LogState();
+                _logger.LogDebug("Task stopped.");
             }
         }
 
-        void LogState()
-        {
-            _logger.LogDebug(
-                $"\nSTATE:\n" +
-                $"{nameof(_playbackTask)}={_playbackTask}\n" +
-                $"{nameof(_playbackTask)} canceled={_playbackTask?.IsCanceled}\n" +
-                $"{nameof(_playbackTask)} completed={_playbackTask?.IsCompleted}\n" +
-                $"{nameof(_disableAutoplay)}={_disableAutoplay}\n"
-            );
-        }
-
-        bool TryConsumeAndPlay()
+        private bool TryConsumeAndPlay(bool isInvokedByAutoplay = false)
         {
             if (!TrackQueue.Any())
             {
@@ -112,16 +133,16 @@ namespace Woofer.Core.Audio
 
             _playbackCts = new CancellationTokenSource();
 
-            _logger.LogDebug($"Now playing: {track}"); LogState();
+            _logger.LogDebug($"Now playing (Autoplay? {isInvokedByAutoplay}): {track}");
             _playbackTask = Task.Run(() => StreamTrack(track), _playbackCts.Token);
             _playbackTask.ContinueWith(t =>
             {
-                _logger.LogDebug("Task finished."); LogState();
+                _logger.LogDebug("Task finished.");
 
                 if (!_disableAutoplay)
                 {
-                    _logger.LogDebug("Autoplay next."); LogState();
-                    TryConsumeAndPlay();
+                    _logger.LogDebug("Autoplay next.");
+                    TryConsumeAndPlay(true);
                 }
             });
             _playbackTask.Exception?.Handle(HandleException);
@@ -129,15 +150,15 @@ namespace Woofer.Core.Audio
             return true;
         }
 
-        bool HandleException(Exception ex)
+        private bool HandleException(Exception ex)
         {
-            _logger.LogError("[Play] {Message}", ex); LogState();
+            _logger.LogError("[Play] {Message}", ex);
             ClearCurrentTrack();
 
             return true;
         }
 
-        async Task StreamTrack(ITrack track)
+        private async Task StreamTrack(ITrack track)
         {
             SetCurrentTrack(track);
             _isPaused.Set();
@@ -170,7 +191,7 @@ namespace Woofer.Core.Audio
             }
             catch (OperationCanceledException)
             {
-                _logger.LogDebug($"Playback cancelled: {track.Title}"); LogState();
+                _logger.LogDebug($"Playback cancelled: {track.Title}");
             }
             finally
             {
@@ -180,7 +201,7 @@ namespace Woofer.Core.Audio
                 _pool.Return(sampleBuffer);
             }
 
-            _logger.LogDebug($"Playback ended: {track.Title}"); LogState();
+            _logger.LogDebug($"Playback ended: {track.Title}");
 
             ClearCurrentTrack();
         }

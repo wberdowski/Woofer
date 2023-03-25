@@ -3,6 +3,7 @@ using Discord.Audio;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 using Un4seen.Bass;
+using Woofer.Core.Exceptions;
 
 namespace Woofer.Core.Audio
 {
@@ -25,7 +26,7 @@ namespace Woofer.Core.Audio
 
             if (bassStatus != BASSError.BASS_OK)
             {
-                throw new Exception("BASS: " + bassStatus);
+                throw new BassException(bassStatus);
             }
         }
 

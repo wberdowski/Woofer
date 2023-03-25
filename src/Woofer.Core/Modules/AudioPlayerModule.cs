@@ -101,7 +101,8 @@ namespace Woofer.Core.Modules
 
             {
                 var embed = new EmbedBuilder()
-                   .WithAuthor($"🔍 Searching YouTube for {searchQuery}...")
+                   .WithAuthor($"🔍 Searching YouTube...")
+                   .WithDescription($"Search phrase: \"**{searchQuery}**\"")
                    .WithColor(Color.DarkPurple)
                    .Build();
 

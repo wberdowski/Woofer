@@ -4,7 +4,6 @@ using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using System;
 using System.Diagnostics;
 using System.Reflection;
 using Woofer.Core.Config;
@@ -53,7 +52,7 @@ namespace Woofer.Core
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex.Message);
+                _logger.LogError(ex.ToString());
                 await Task.Delay(1);
                 return;
             }
