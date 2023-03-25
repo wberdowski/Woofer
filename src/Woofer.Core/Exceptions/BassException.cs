@@ -1,20 +1,20 @@
-﻿using System.Runtime.Serialization;
-using Un4seen.Bass;
+﻿using ManagedBass;
+using System.Runtime.Serialization;
 
 namespace Woofer.Core.Exceptions
 {
     [Serializable]
     internal class BassException : Exception
     {
-        private BASSError BassStatus { get; set; }
+        private Errors BassError { get; set; }
 
         public BassException()
         {
         }
 
-        public BassException(BASSError bassStatus) : base(bassStatus.ToString())
+        public BassException(Errors bassStatus) : base(bassStatus.ToString())
         {
-            BassStatus = bassStatus;
+            BassError = bassStatus;
         }
 
         public BassException(string? message) : base(message)

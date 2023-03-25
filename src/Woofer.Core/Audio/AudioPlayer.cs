@@ -1,8 +1,7 @@
 ﻿using Discord.Audio;
+using ManagedBass;
 using Microsoft.Extensions.Logging;
 using System.Buffers;
-using Un4seen.Bass;
-using Un4seen.Bass.AddOn.WebM;
 using Woofer.Core.Common;
 
 namespace Woofer.Core.Audio
@@ -57,25 +56,28 @@ namespace Woofer.Core.Audio
 
         public async Task Enqueue(ITrack track)
         {
-            await Task.Run(() =>
+            lock (_controlLock)
             {
-                lock (_controlLock)
-                {
-                    TrackQueue.Add(track);
+                TrackQueue.Add(track);
 
-                    if (_currentTrack == null && _trackQueue.Count == 1)
-                    {
-                        TryConsumeAndPlay();
-                    }
+                if (_currentTrack == null && _trackQueue.Count == 1)
+                {
+                    TryConsumeAndPlay();
                 }
-            });
+            }
+
+            await Task.CompletedTask;
         }
 
-        public async Task Stop()
+        public Task<ITrack?> Stop()
         {
+            ITrack? track = null;
+
             lock (_controlLock)
             {
                 _logger.LogDebug("STOP.");
+
+                track = CurrentTrack;
 
                 _disableAutoplay = true;
                 _playbackCts?.Cancel();
@@ -84,14 +86,18 @@ namespace Woofer.Core.Audio
                 WaitForPlaybackTaskFinished().Wait();
             }
 
-            await Task.CompletedTask;
+            return Task.FromResult(track);
         }
 
-        public async Task Skip()
+        public Task<ITrack?> Skip()
         {
+            ITrack? track = null;
+
             lock (_controlLock)
             {
                 _logger.LogDebug("SKIP.");
+
+                track = CurrentTrack;
 
                 _disableAutoplay = true;
                 _playbackCts?.Cancel();
@@ -102,7 +108,7 @@ namespace Woofer.Core.Audio
                 TryConsumeAndPlay();
             }
 
-            await Task.CompletedTask;
+            return Task.FromResult(track);
         }
 
         private void SetCurrentTrack(ITrack track) => _currentTrack = track;
@@ -163,25 +169,27 @@ namespace Woofer.Core.Audio
             SetCurrentTrack(track);
             _isPaused.Set();
 
-            _playbackHandle = BassWebM.BASS_WEBM_StreamCreateURL(
+            _playbackHandle = Bass.CreateStream(
                 track.AudioSource.Url,
                 0,
-                BASSFlag.BASS_STREAM_DECODE | BASSFlag.BASS_STREAM_PRESCAN,
-                null,
-                IntPtr.Zero,
-                0
+                BassFlags.Decode | BassFlags.Prescan,
+                null
             );
 
-            var bufferSize = (int)Bass.BASS_ChannelSeconds2Bytes(_playbackHandle, 0.1f);
+            var bufferSize = (int)Bass.ChannelSeconds2Bytes(_playbackHandle, 0.1f);
             var sampleBuffer = _pool.Rent(bufferSize);
+
+            await _outputStream.FlushAsync();
+            _outputStream.Clear();
 
             try
             {
-                while (Bass.BASS_ChannelIsActive(_playbackHandle) == BASSActive.BASS_ACTIVE_PLAYING)
+                while (Bass.ChannelIsActive(_playbackHandle) == PlaybackState.Playing)
                 {
                     _isPaused.WaitOne();
                     _playbackCts?.Token.ThrowIfCancellationRequested();
-                    var bytesRead = Bass.BASS_ChannelGetData(_playbackHandle, sampleBuffer, bufferSize);
+
+                    var bytesRead = Bass.ChannelGetData(_playbackHandle, sampleBuffer, bufferSize);
 
                     if (bytesRead > 0)
                     {
@@ -197,7 +205,7 @@ namespace Woofer.Core.Audio
             {
 
                 await _outputStream.FlushAsync();
-                BassWebM.FreeMe();
+                Bass.StreamFree(_playbackHandle);
                 _pool.Return(sampleBuffer);
             }
 
@@ -208,7 +216,7 @@ namespace Woofer.Core.Audio
 
         public void Dispose()
         {
-            BassWebM.FreeMe();
+            Bass.Free();
             _outputStream.Dispose();
             _outputStream.Flush();
         }

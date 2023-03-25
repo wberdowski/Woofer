@@ -1,9 +1,8 @@
 ﻿using Discord;
 using Discord.Audio;
 using Discord.WebSocket;
+using ManagedBass;
 using Microsoft.Extensions.Logging;
-using Un4seen.Bass;
-using Woofer.Core.Exceptions;
 
 namespace Woofer.Core.Audio
 {
@@ -19,14 +18,13 @@ namespace Woofer.Core.Audio
             _client = client;
             _logger = logger;
 
-            Bass.BASS_Init(-1, -1, BASSInit.BASS_DEVICE_NOSPEAKER, IntPtr.Zero);
-            Bass.BASS_PluginLoad("bassopus.dll");
+            Bass.Init(-1, -1, DeviceInitFlags.NoSpeakerAssignment, IntPtr.Zero);
+            Bass.PluginLoad("bassopus.dll");
+            Bass.PluginLoad("basswebm.dll");
 
-            var bassStatus = Bass.BASS_ErrorGetCode();
-
-            if (bassStatus != BASSError.BASS_OK)
+            if (Bass.LastError != Errors.OK)
             {
-                throw new BassException(bassStatus);
+                throw new Exceptions.BassException(Bass.LastError);
             }
         }
 

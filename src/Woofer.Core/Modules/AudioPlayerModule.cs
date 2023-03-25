@@ -180,11 +180,11 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            var stopTask = audioPlayer.Stop();
+            var stoppedTrack = await audioPlayer.Stop();
 
             {
                 var embed = new EmbedBuilder()
-                   .WithAuthor($"⏹️ Stopping")
+                   .WithAuthor($"⏹️ Stopping {stoppedTrack?.Title}")
                    .WithColor(Color.DarkPurple)
                    .Build();
 
@@ -192,8 +192,6 @@ namespace Woofer.Core.Modules
                     embeds: new Embed[] { embed }
                 );
             }
-
-            await stopTask;
         }
 
         private async Task HandleSkipCommand(SocketSlashCommand command)
@@ -204,18 +202,16 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            var skipTask = audioPlayer.Skip();
+            var skippedTrack = await audioPlayer.Skip();
 
             var embed = new EmbedBuilder()
-               .WithAuthor($"⏭️ Skipping")
+               .WithAuthor($"⏭️ Skipping {skippedTrack?.Title}")
                .WithColor(Color.DarkPurple)
                .Build();
 
             await command.RespondAsync(
                 embeds: new Embed[] { embed }
             );
-
-            await skipTask;
         }
 
         private async Task HandlePauseCommand(SocketSlashCommand command)

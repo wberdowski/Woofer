@@ -14,6 +14,8 @@
     <PackageReference Include="Discord.Net.Rpc" Version="2.0.0-beta-00860" />
     <PackageReference Include="Discord.Net.Webhook" Version="3.9.0-build-20230302.10" />
     <PackageReference Include="Discord.Net.WebSocket" Version="3.9.0-build-20230302.10" />
+    <PackageReference Include="ManagedBass" Version="3.1.1" />
+    <PackageReference Include="ManagedBass.Opus" Version="3.1.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.1" />
     <PackageReference Include="System.Windows.Extensions" Version="7.0.0" />
@@ -25,17 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="Bass.Net">
-      <HintPath>Bass.Net.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
     <None Update="bass.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Bass.Net.dll">
-      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </None>
     <None Update="bassopus.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
