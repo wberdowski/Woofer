@@ -6,6 +6,9 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using Woofer.Core.Common;
+using Woofer.Core.Common.Interfaces;
 using Woofer.Core.Config;
 
 namespace Woofer.Core
@@ -37,7 +40,11 @@ namespace Woofer.Core
         private async Task RunAsync(string[] args)
         {
             AppDomain.CurrentDomain.ProcessExit += OnApplicationExit;
-            Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+            }
 
             SetupLogging();
 

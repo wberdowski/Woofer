@@ -1,69 +1,68 @@
 ﻿using Discord;
-using Discord.Audio;
 using Discord.WebSocket;
 using ManagedBass;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Woofer.Core.Audio
 {
     internal class AudioPlayerManager
     {
-        public Dictionary<ulong, AudioPlayer> AudioPlayers { get; set; }
+        private readonly Dictionary<ulong, AudioPlayer> _audioPlayers;
         private readonly DiscordSocketClient _client;
         private readonly ILogger<AudioPlayerManager> _logger;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly IServiceScope _scope;
 
-        public AudioPlayerManager(DiscordSocketClient client, ILogger<AudioPlayerManager> logger)
+        public AudioPlayerManager(DiscordSocketClient client, ILogger<AudioPlayerManager> logger, IServiceProvider serviceProvider)
         {
-            AudioPlayers = new Dictionary<ulong, AudioPlayer?>();
+            _audioPlayers = new Dictionary<ulong, AudioPlayer>();
             _client = client;
             _logger = logger;
 
-            Bass.Init(-1, -1, DeviceInitFlags.NoSpeakerAssignment, IntPtr.Zero);
-            Bass.PluginLoad("bassopus.dll");
-            Bass.PluginLoad("basswebm.dll");
+            if (!Bass.Init(0, -1, DeviceInitFlags.Default))
+            {
+                throw new Exceptions.BassException("Can't initialize BASS library.");
+            }
+
+            Bass.PluginLoad("bassopus");
+            Bass.PluginLoad("basswebm");
 
             if (Bass.LastError != Errors.OK)
             {
                 throw new Exceptions.BassException(Bass.LastError);
             }
+
+            _serviceProvider = serviceProvider;
+            _scope = _serviceProvider.CreateScope();
         }
 
         public async Task<AudioPlayer?> RequestAudioPlayerAtChannel(ulong guildId, IVoiceChannel channel)
         {
-            IAudioClient? audioClient;
             AudioPlayer audioPlayer;
 
-            if (await IsAudioPlayerConnected(channel))
+            if (!_audioPlayers.TryGetValue(guildId, out audioPlayer))
             {
-                if (AudioPlayers.TryGetValue(guildId, out audioPlayer) /*&& audioPlayer.AudioClient.ConnectionState == ConnectionState.Connected*/)
-                {
-                    _logger.LogDebug($"Reusing {nameof(AudioPlayer)}.");
-                    return audioPlayer;
-                }
-
-                _logger.LogDebug($"Player connected, but no {nameof(AudioPlayer)} found.");
-                audioClient = await channel.ConnectAsync(true);
-
-                audioPlayer = new AudioPlayer(audioClient, _logger);
-                AudioPlayers.Add(guildId, audioPlayer);
+                audioPlayer = _scope.ServiceProvider.GetRequiredService<AudioPlayer>();
+                var audioClient = await channel.ConnectAsync(true);
+                await audioPlayer.SetAudioClient(audioClient);
+                _audioPlayers.Add(guildId, audioPlayer);
 
                 return audioPlayer;
             }
 
-            AudioPlayers.Remove(guildId);
-
-            _logger.LogDebug($"Creating new {nameof(AudioPlayer)}.");
-            audioClient = await channel.ConnectAsync(true);
-            audioPlayer = new AudioPlayer(audioClient, _logger);
-
-            AudioPlayers.Add(guildId, audioPlayer);
+            if (!await IsAudioPlayerConnected(channel))
+            {
+                var audioClient = await channel.ConnectAsync(true);
+                await audioPlayer.SetAudioClient(audioClient);
+            }
 
             return audioPlayer;
         }
 
         public AudioPlayer? GetAudioPlayer(ulong guildId)
         {
-            if (AudioPlayers.TryGetValue(guildId, out var player))
+            if (_audioPlayers.TryGetValue(guildId, out var player))
             {
                 return player;
             }
@@ -73,16 +72,21 @@ namespace Woofer.Core.Audio
 
         public async Task DisposeAudioPlayer(ulong guildId)
         {
-            if (AudioPlayers.TryGetValue(guildId, out var player))
+            if (_audioPlayers.TryGetValue(guildId, out var player))
             {
                 player?.Dispose();
-                AudioPlayers.Remove(guildId);
+                _audioPlayers.Remove(guildId);
             }
         }
 
         private async Task<bool> IsAudioPlayerConnected(IVoiceChannel channel)
         {
             return await channel.GetUserAsync(_client.CurrentUser.Id) != null;
+        }
+
+        ~AudioPlayerManager()
+        {
+            Bass.Free();
         }
     }
 }

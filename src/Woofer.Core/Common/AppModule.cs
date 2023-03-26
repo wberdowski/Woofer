@@ -1,7 +1,8 @@
 ﻿using Discord;
 using Discord.WebSocket;
+using Woofer.Core.Common.Interfaces;
 
-namespace Woofer.Core
+namespace Woofer.Core.Common
 {
     internal abstract class AppModule : IAppModule
     {

@@ -3,11 +3,12 @@ using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Woofer.Core.Audio;
+using Woofer.Core.Common.Interfaces;
 using Woofer.Core.Config;
 using Woofer.Core.Modules;
 using YoutubeExplode;
 
-namespace Woofer.Core
+namespace Woofer.Core.Common
 {
     internal static class DependencyInjection
     {
@@ -38,7 +39,8 @@ namespace Woofer.Core
         public static IServiceCollection AddAudio(this IServiceCollection services)
         {
             return services
-                .AddSingleton<AudioPlayerManager>();
+                .AddSingleton<AudioPlayerManager>()
+                .AddScoped<AudioPlayer>();
         }
 
         public static IServiceCollection AddBotModules(this IServiceCollection services)

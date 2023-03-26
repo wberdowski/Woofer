@@ -1,5 +1,6 @@
 ﻿using Discord;
 using Discord.WebSocket;
+using Woofer.Core.Common;
 
 namespace Woofer.Core.Modules
 {
