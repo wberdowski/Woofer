@@ -2,6 +2,8 @@
 {
     internal enum UserError
     {
-        NoTrackIsCurrentlyPlaying
+        NoTrackIsCurrentlyPlaying,
+        UserNotInTheChannel,
+        CommandUnavailableInDms
     }
 }

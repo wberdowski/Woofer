@@ -1,7 +1,7 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using Woofer.Core.Audio;
 using Woofer.Core.Common.Interfaces;
 using Woofer.Core.Config;
@@ -14,20 +14,20 @@ namespace Woofer.Core.Common
     {
         public static IServiceCollection AddBotServices(this IServiceCollection services)
         {
+            var logger = new LoggerConfiguration()
+#if DEBUG
+            .MinimumLevel.Debug()
+#else
+            .MinimumLevel.Information()
+#endif
+            .WriteTo.File("logs/log.txt", rollingInterval: RollingInterval.Day)
+            .WriteTo.Console()
+            .CreateLogger();
+
             return services
                 .AddLogging(c =>
                 {
-#if DEBUG
-                    c.SetMinimumLevel(LogLevel.Debug);
-#else
-                    c.SetMinimumLevel(LogLevel.Information);
-#endif
-                    c.AddSimpleConsole(o =>
-                    {
-                        o.UseUtcTimestamp = true;
-                        o.TimestampFormat = "HH:mm:ss ";
-                        o.SingleLine = false;
-                    });
+                    c.AddSerilog(logger);
                 })
                 .AddConfig()
                 .AddDiscord()
@@ -53,7 +53,8 @@ namespace Woofer.Core.Common
         public static IServiceCollection AddSearchServices(this IServiceCollection services)
         {
             return services
-                .AddSingleton<YoutubeClient>();
+                .AddSingleton<YoutubeClient>()
+                .AddSingleton<SearchProvider>();
         }
 
         private static IServiceCollection AddDiscord(this IServiceCollection services)

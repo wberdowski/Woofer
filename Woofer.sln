@@ -5,10 +5,6 @@ VisualStudioVersion = 17.4.33213.308
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{BF55B4E1-0F82-42CA-9EB3-2CE90122E761}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{E53DA131-CEAC-4426-AB48-7445DBA91918}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Woofer.Tests", "Tests\Woofer.Tests\Woofer.Tests.csproj", "{5677A1C6-4982-4213-8C61-950B4BA5F4B3}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Woofer.Core", "src\Woofer.Core\Woofer.Core.csproj", "{F9900137-69CD-45BE-8071-5276FC74762C}"
 EndProject
 Global
@@ -17,10 +13,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{5677A1C6-4982-4213-8C61-950B4BA5F4B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5677A1C6-4982-4213-8C61-950B4BA5F4B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5677A1C6-4982-4213-8C61-950B4BA5F4B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5677A1C6-4982-4213-8C61-950B4BA5F4B3}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F9900137-69CD-45BE-8071-5276FC74762C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F9900137-69CD-45BE-8071-5276FC74762C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F9900137-69CD-45BE-8071-5276FC74762C}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -30,7 +22,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{5677A1C6-4982-4213-8C61-950B4BA5F4B3} = {E53DA131-CEAC-4426-AB48-7445DBA91918}
 		{F9900137-69CD-45BE-8071-5276FC74762C} = {BF55B4E1-0F82-42CA-9EB3-2CE90122E761}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution

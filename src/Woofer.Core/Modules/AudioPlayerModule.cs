@@ -1,29 +1,28 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
-using System.Reflection.Emit;
 using Woofer.Core.Audio;
 using Woofer.Core.Common;
 using Woofer.Core.Common.Enums;
+using Woofer.Core.Modules.Attributes;
 using Woofer.Core.Modules.Extensions;
-using YoutubeExplode;
 
 namespace Woofer.Core.Modules
 {
     internal class AudioPlayerModule : AppModule
     {
-        private readonly YoutubeClient _ytClient;
+        private readonly SearchProvider _searchProvider;
         private readonly AudioPlayerManager _audioPlayerManager;
         private readonly ILogger _logger;
         private SocketSlashCommand? _lastAddToQueueMessage;
         private Embed? _lastAddToQueueMessageEmbed;
         private Track? _lastAddToQueueMessageTrack;
 
-        public AudioPlayerModule(YoutubeClient client, AudioPlayerManager audioPlayerManager, ILogger<AudioPlayerModule> logger)
+        public AudioPlayerModule(AudioPlayerManager audioPlayerManager, ILogger<AudioPlayerModule> logger, SearchProvider searchProvider)
         {
-            _ytClient = client;
             _audioPlayerManager = audioPlayerManager;
             _logger = logger;
+            _searchProvider = searchProvider;
         }
 
         public override IEnumerable<ApplicationCommandProperties> RegisterCommands()
@@ -91,8 +90,6 @@ namespace Woofer.Core.Modules
 
         public override async Task HandleButtonExecuted(SocketMessageComponent component)
         {
-            // TODO
-
             if (!TryGetActivePlayer(component, out var audioPlayer))
             {
                 await SendNoActivePlayerError(component);
@@ -135,14 +132,17 @@ namespace Woofer.Core.Modules
             }
         }
 
+        [RequireGuild]
         private async Task HandlePlayCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
-
-            if (command.GuildId == null)
+            var channel = (command.User as IGuildUser)?.VoiceChannel;
+            if (channel == null)
             {
+                await command.RespondWithUserError(UserError.UserNotInTheChannel);
                 return;
             }
+
+            await TryRevokeLastMessageControls();
 
             var searchQuery = command.Data.Options.First().Value.ToString();
 
@@ -153,34 +153,12 @@ namespace Woofer.Core.Modules
                    .Build();
 
                 await command.RespondAsync(
-                   embeds: new Embed[] { embed },
-                   ephemeral: true
-               );
+                    embeds: new Embed[] { embed },
+                    ephemeral: true
+                );
             }
 
-            var results = _ytClient.Search.GetResultsAsync(searchQuery);
-            var result = results.FirstAsync().Result;
-            var video = await _ytClient.Videos.GetAsync(result.Url);
-            var manifest = await _ytClient.Videos.Streams.GetManifestAsync(result.Url);
-
-            // Select best quality
-            var audioSource = manifest.GetAudioOnlyStreams()
-                .Where(x => x.AudioCodec == "opus")
-                .OrderByDescending(x => x.Bitrate.KiloBitsPerSecond)
-                .First();
-
-            var track = new WebSearchResult(
-                video.Title,
-                video.Duration,
-                TimeSpan.Zero,
-                video.Url,
-                video.Thumbnails.FirstOrDefault()?.Url,
-                new WebAudioSource(
-                    (int)Math.Ceiling(audioSource.Bitrate.KiloBitsPerSecond),
-                    audioSource.AudioCodec,
-                    audioSource.Url
-                )
-            );
+            var track = await _searchProvider.Search(searchQuery);
 
             {
                 var embed = new EmbedBuilder()
@@ -208,13 +186,6 @@ namespace Woofer.Core.Modules
                 _lastAddToQueueMessage = command;
                 _lastAddToQueueMessageEmbed = embed;
                 _lastAddToQueueMessageTrack = track;
-            }
-
-            var channel = (command.User as IGuildUser)?.VoiceChannel;
-            if (channel == null)
-            {
-                await command.RespondAsync("User not in the channel.");
-                return;
             }
 
             var audioPlayer = await _audioPlayerManager.RequestAudioPlayerAtChannel((ulong)command.GuildId, channel);

@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using Woofer.Core.Common;
 using Woofer.Core.Common.Interfaces;
 using Woofer.Core.Config;
@@ -48,8 +49,8 @@ namespace Woofer.Core
 
             SetupLogging();
 
-            var assemblyName = Assembly.GetExecutingAssembly().GetName();
-            _logger.LogInformation($"Woofer v{assemblyName.Version?.ToString(3)}");
+            var version = AssemblyHelper.GetVersion();
+            _logger.LogInformation($"Woofer v{version}");
 
             try
             {
@@ -165,6 +166,8 @@ namespace Woofer.Core
 
         private async Task OnSlashCommandExecuted(SocketSlashCommand command)
         {
+            _logger.LogDebug($"Command received: /{command.CommandName} {string.Join(" ", command.Data.Options.Select(o => $"{o.Name}: {o.Value}"))}");
+
             await Task.Run(() =>
             {
                 Parallel.ForEach(_modules, async module =>

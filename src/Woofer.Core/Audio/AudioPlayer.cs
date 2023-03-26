@@ -140,8 +140,6 @@ namespace Woofer.Core.Audio
 
             lock (_controlLock)
             {
-                _logger.LogDebug("STOP.");
-
                 track = _currentTrack;
 
                 InternalStop().Wait();
@@ -170,8 +168,6 @@ namespace Woofer.Core.Audio
 
             lock (_controlLock)
             {
-                _logger.LogDebug("SKIP.");
-
                 track = _currentTrack;
 
                 InternalSkip().Wait();
