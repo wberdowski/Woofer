@@ -43,6 +43,7 @@ namespace Woofer.Core.Audio
 
             if (!_audioPlayers.TryGetValue(guildId, out audioPlayer))
             {
+                _logger.LogDebug("Create AudioPlayer instance. Join channel.");
                 audioPlayer = _scope.ServiceProvider.GetRequiredService<AudioPlayer>();
                 var audioClient = await channel.ConnectAsync(true);
                 await audioPlayer.SetAudioClient(audioClient);
@@ -53,6 +54,7 @@ namespace Woofer.Core.Audio
 
             if (!await IsAudioPlayerConnected(channel))
             {
+                _logger.LogDebug("Change channel.");
                 var audioClient = await channel.ConnectAsync(true);
                 await audioPlayer.SetAudioClient(audioClient);
             }

@@ -2,6 +2,7 @@
 using ManagedBass;
 using Microsoft.Extensions.Logging;
 using System.Buffers;
+using System.Diagnostics;
 
 namespace Woofer.Core.Audio
 {
@@ -77,7 +78,7 @@ namespace Woofer.Core.Audio
 
                 if (_currentTrack == null && _trackQueue.Count == 1)
                 {
-                    TryConsumeAndPlay();
+                    TryStopConsumeAndPlay().Wait();
                 }
             }
 
@@ -148,20 +149,6 @@ namespace Woofer.Core.Audio
             return Task.FromResult(track);
         }
 
-        private async Task InternalStop()
-        {
-            _playbackCts?.Cancel();
-            _isPaused.Set();
-
-            await WaitForPlaybackTaskFinished();
-        }
-
-        private async Task InternalSkip()
-        {
-            await InternalStop();
-            TryConsumeAndPlay();
-        }
-
         public Task<Track?> Skip()
         {
             Track? track = null;
@@ -176,12 +163,25 @@ namespace Woofer.Core.Audio
             return Task.FromResult(track);
         }
 
+        private async Task InternalStop()
+        {
+            _playbackCts?.Cancel();
+            _isPaused.Set();
+
+            await WaitForPlaybackTaskFinished();
+        }
+
+        private async Task InternalSkip()
+        {
+            await TryStopConsumeAndPlay();
+        }
+
         private void SetCurrentTrack(Track track) => _currentTrack = track;
         private void ClearCurrentTrack() => _currentTrack = null;
 
         private async Task WaitForPlaybackTaskFinished()
         {
-            if (_playbackTask != null && !_playbackTask.IsCanceled && !_playbackTask.IsCompleted)
+            if (_playbackTask != null /*&& (_playbackCts != null && !_playbackCts.IsCancellationRequested)*/)
             {
                 _logger.LogDebug("Stopping task.");
                 await _playbackTask;
@@ -189,16 +189,16 @@ namespace Woofer.Core.Audio
             }
         }
 
-        private bool TryConsumeAndPlay(bool isInvokedByAutoplay = false)
+        private async Task TryStopConsumeAndPlay(bool isInvokedByAutoplay = false)
         {
             if (!TrackQueue.Any())
             {
-                return false;
+                await Task.FromResult(false);
             }
 
             if (!isInvokedByAutoplay)
             {
-                _playbackTask?.Wait();
+                await InternalStop();
             }
 
             var track = TrackQueue.First();
@@ -207,14 +207,19 @@ namespace Woofer.Core.Audio
             _playbackCts = new CancellationTokenSource();
 
             _logger.LogDebug($"Now playing (Autoplay? {isInvokedByAutoplay}): {track}");
-            _playbackTask = Task.Run(() => StreamTrack(track), _playbackCts.Token);
-            _playbackTask.ContinueWith(t =>
-            {
-                _logger.LogDebug("Task finished.");
-            });
-            _playbackTask.Exception?.Handle(HandleException);
 
-            return true;
+            _playbackTask = Task.Run(() => 
+                StreamTrack(track, _playbackCts.Token),
+                _playbackCts.Token
+            ).ContinueWith((t) =>
+            {
+                if (t.IsFaulted)
+                {
+                    HandleException(t.Exception);
+                }
+            });
+
+            await Task.FromResult(true);
         }
 
         private bool HandleException(Exception ex)
@@ -225,7 +230,7 @@ namespace Woofer.Core.Audio
             return true;
         }
 
-        private Task StreamTrack(Track track)
+        private void StreamTrack(Track track, CancellationToken cancellationToken)
         {
             SetCurrentTrack(track);
             _isPaused.Set();
@@ -239,8 +244,7 @@ namespace Woofer.Core.Audio
 
             if (Bass.LastError != Errors.OK)
             {
-                var ex = new Exceptions.BassException(Bass.LastError);
-                _logger.LogError(ex, ex.Message);
+                throw new Exceptions.BassException(Bass.LastError);
             }
 
             var bufferSize = (int)Bass.ChannelSeconds2Bytes(_playbackHandle, 0.1f);
@@ -251,7 +255,7 @@ namespace Woofer.Core.Audio
                 while (Bass.ChannelIsActive(_playbackHandle) == PlaybackState.Playing)
                 {
                     _isPaused.WaitOne();
-                    _playbackCts?.Token.ThrowIfCancellationRequested();
+                    cancellationToken.ThrowIfCancellationRequested();
 
                     var bytesRead = Bass.ChannelGetData(_playbackHandle, sampleBuffer, bufferSize);
 
@@ -267,7 +271,7 @@ namespace Woofer.Core.Audio
             catch (OperationCanceledException)
             {
                 _logger.LogDebug($"Playback cancelled: {track.Title}");
-                return Task.CompletedTask;
+                throw;
             }
             finally
             {
@@ -278,10 +282,8 @@ namespace Woofer.Core.Audio
                 _logger.LogDebug($"Playback ended: {track.Title}");
             }
 
-            var result = TryConsumeAndPlay(true);
+            var result = TryStopConsumeAndPlay(true);
             _logger.LogDebug($"Autoplay next = {result}");
-
-            return Task.CompletedTask;
         }
 
         public void Dispose()
