@@ -2,7 +2,6 @@
 using ManagedBass;
 using Microsoft.Extensions.Logging;
 using System.Buffers;
-using System.Diagnostics;
 
 namespace Woofer.Core.Audio
 {
@@ -19,6 +18,7 @@ namespace Woofer.Core.Audio
         private int _playbackHandle;
         private readonly ManualResetEvent _isPaused = new(false);
         private Track? _currentTrack;
+        private IAudioClient? _audioClient;
         private readonly List<Track> _trackQueue = new();
         private readonly object _streamLock = new();
         private readonly object _controlLock = new();
@@ -33,12 +33,17 @@ namespace Woofer.Core.Audio
         {
             lock (_controlLock)
             {
-                InternalStop().Wait();
+                lock (_streamLock)
+                {
+                    _audioClient?.StopAsync().Wait();
+                    _audioClient?.Dispose();
 
-                _outputStream = audioClient.CreatePCMStream(
-                    AudioApplication.Music
-                //packetLoss: 100 // TODO
-                );
+                    _audioClient = audioClient;
+
+                    _outputStream = _audioClient.CreatePCMStream(
+                        AudioApplication.Music
+                    );
+                }
             }
 
             return Task.CompletedTask;
@@ -208,7 +213,7 @@ namespace Woofer.Core.Audio
 
             _logger.LogDebug($"Now playing (Autoplay? {isInvokedByAutoplay}): {track}");
 
-            _playbackTask = Task.Run(() => 
+            _playbackTask = Task.Run(() =>
                 StreamTrack(track, _playbackCts.Token),
                 _playbackCts.Token
             ).ContinueWith((t) =>

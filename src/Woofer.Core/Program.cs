@@ -5,11 +5,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using Woofer.Core.Common;
-using Woofer.Core.Common.Interfaces;
 using Woofer.Core.Config;
 
 namespace Woofer.Core
@@ -20,7 +17,7 @@ namespace Woofer.Core
         private ConfigManager _configManager;
         private DiscordSocketClient _client;
         private ILogger _logger;
-        private IEnumerable<IAppModule> _modules;
+        private IEnumerable<AppModule> _modules;
 
         public Program()
         {
@@ -103,7 +100,7 @@ namespace Woofer.Core
 
         private void SetupModules()
         {
-            _modules = (IEnumerable<IAppModule>)_serviceProvider.GetServices(typeof(IAppModule));
+            _modules = (IEnumerable<AppModule>)_serviceProvider.GetServices(typeof(AppModule));
             _logger.LogDebug($"{_modules.Count()} module(s) loaded.");
         }
 
@@ -133,7 +130,7 @@ namespace Woofer.Core
 
                 foreach (var module in _modules)
                 {
-                    var commands = module.RegisterCommands();
+                    var commands = await module.RegisterCommands();
                     properties.AddRange(commands);
                 }
 

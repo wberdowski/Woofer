@@ -3,7 +3,6 @@ using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Woofer.Core.Audio;
-using Woofer.Core.Common.Interfaces;
 using Woofer.Core.Config;
 using Woofer.Core.Modules;
 using YoutubeExplode;
@@ -46,8 +45,8 @@ namespace Woofer.Core.Common
         public static IServiceCollection AddBotModules(this IServiceCollection services)
         {
             return services
-                .AddSingleton<IAppModule, HelpModule>()
-                .AddSingleton<IAppModule, AudioPlayerModule>();
+                .AddSingleton<AppModule, HelpModule>()
+                .AddSingleton<AppModule, AudioPlayerModule>();
         }
 
         public static IServiceCollection AddSearchServices(this IServiceCollection services)

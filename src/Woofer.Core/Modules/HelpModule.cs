@@ -6,25 +6,16 @@ namespace Woofer.Core.Modules
 {
     internal class HelpModule : AppModule
     {
-        public override IEnumerable<ApplicationCommandProperties> RegisterCommands()
+        public override Task<IEnumerable<ApplicationCommandProperties>> RegisterCommands()
         {
-            var properties = new List<ApplicationCommandProperties>();
+            RegisterCommand("help", "Show help.", HandleHelpCommand);
 
-            var cmd = new SlashCommandBuilder()
-                .WithName("help")
-                .WithDescription("Show help.");
-
-            properties.Add(cmd.Build());
-
-            return properties;
+            return base.RegisterCommands();
         }
 
-        public override async Task HandleCommand(SocketSlashCommand command)
+        private async Task HandleHelpCommand(SocketSlashCommand command)
         {
-            if (command.CommandName == "help")
-            {
-                await command.RespondAsync($"Help should be here", ephemeral: true);
-            }
+            await command.RespondAsync("TODO: Help should be here.");
         }
     }
 }

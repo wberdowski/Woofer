@@ -25,67 +25,26 @@ namespace Woofer.Core.Modules
             _searchProvider = searchProvider;
         }
 
-        public override IEnumerable<ApplicationCommandProperties> RegisterCommands()
+        public override Task<IEnumerable<ApplicationCommandProperties>> RegisterCommands()
         {
-            var properties = new List<ApplicationCommandProperties>
-            {
-                new SlashCommandBuilder()
-                    .WithName("play")
-                    .WithDescription("Play an audio track from YouTube.")
-                    .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true)
-                    .Build(),
+            RegisterCommand("play", "Play an audio track from YouTube.", HandlePlayCommand, new SlashCommandBuilder()
+                .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
 
-                new SlashCommandBuilder()
-                    .WithName("stop")
-                    .WithDescription("Stop currently playing song.")
-                    .Build(),
+            RegisterCommand("delete", "Delete track at the provided position.", HandleDeleteCommand, new SlashCommandBuilder()
+                .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
 
-                new SlashCommandBuilder()
-                    .WithName("skip")
-                    .WithDescription("Skip current song and play next in the queue.")
-                    .Build(),
+            RegisterCommand("stop", "Stop currently playing track.", HandleStopCommand);
+            RegisterCommand("skip", "Skip current track and play next in the queue.", HandleSkipCommand, "next");
+            RegisterCommand("queue", "Show currently playing track and the queue.", HandleQueueCommand, "current", "nowplaying");
+            RegisterCommand("pause", "Pause currently playing track.", HandlePauseCommand);
+            RegisterCommand("resume", "Resume currently playing track.", HandleResumeCommand);
 
-                new SlashCommandBuilder()
-                    .WithName("next")
-                    .WithDescription("Skip current song and play next in the queue.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("queue")
-                    .WithDescription("Show currently playing song and the queue.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("current")
-                    .WithDescription("Show currently playing song and the queue.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("pause")
-                    .WithDescription("Pause currently playing song.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("resume")
-                    .WithDescription("Resume currently playing song.")
-                    .Build()
-            };
-
-            return properties;
+            return base.RegisterCommands();
         }
 
-        public override async Task HandleCommand(SocketSlashCommand command)
+        private async Task HandleDeleteCommand(SocketSlashCommand command)
         {
-            var task = command.CommandName switch
-            {
-                "play" or "p" => HandlePlayCommand(command),
-                "stop" => HandleStopCommand(command),
-                "skip" or "next" => HandleSkipCommand(command),
-                "queue" or "current" => HandleQueueCommand(command),
-                "pause" => HandlePauseCommand(command),
-                "resume" => HandleResumeCommand(command),
-                _ => Task.CompletedTask
-            };
+            await command.RespondAsync("Delete :)", ephemeral: true);
         }
 
         public override async Task HandleButtonExecuted(SocketMessageComponent component)
@@ -136,6 +95,7 @@ namespace Woofer.Core.Modules
         private async Task HandlePlayCommand(SocketSlashCommand command)
         {
             var channel = (command.User as IGuildUser)?.VoiceChannel;
+
             if (channel == null)
             {
                 await command.RespondWithUserError(UserError.UserNotInTheChannel);

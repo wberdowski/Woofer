@@ -7,14 +7,14 @@ namespace Woofer.Core.Modules.Extensions
 {
     internal static class ModuleMessageExtensions
     {
-        public static async Task RespondWithUserError(this SocketSlashCommand command, UserError error)
+        public static async Task RespondWithUserError(this SocketSlashCommand command, UserError error, bool ephemeral = true)
         {
             var embedBuilder = new EmbedBuilder()
                 .WithAuthor($"❌ Error")
                 .WithDescription($"{Regex.Replace(error.ToString(), "([a-z])([A-Z])", "$1 $2")}")
                 .WithColor(Color.Red);
 
-            await command.RespondAsync(embed: embedBuilder.Build());
+            await command.RespondAsync(embed: embedBuilder.Build(), ephemeral: ephemeral);
         }
     }
 }
