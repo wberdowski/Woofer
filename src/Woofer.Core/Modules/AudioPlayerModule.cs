@@ -31,7 +31,7 @@ namespace Woofer.Core.Modules
                 .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
 
             RegisterCommand("delete", "Delete track at the provided position.", HandleDeleteCommand, new SlashCommandBuilder()
-                .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
+                .AddOption("track-position", ApplicationCommandOptionType.Integer, "Track position in the queue.", isRequired: true));
 
             RegisterCommand("stop", "Stop currently playing track.", HandleStopCommand);
             RegisterCommand("skip", "Skip current track and play next in the queue.", HandleSkipCommand, "next");
@@ -40,11 +40,6 @@ namespace Woofer.Core.Modules
             RegisterCommand("resume", "Resume currently playing track.", HandleResumeCommand);
 
             return base.RegisterCommands();
-        }
-
-        private async Task HandleDeleteCommand(SocketSlashCommand command)
-        {
-            await command.RespondAsync("Delete :)", ephemeral: true);
         }
 
         public override async Task HandleButtonExecuted(SocketMessageComponent component)
@@ -152,6 +147,43 @@ namespace Woofer.Core.Modules
             await audioPlayer.Enqueue(track);
         }
 
+        private async Task HandleDeleteCommand(SocketSlashCommand command)
+        {
+            if (!TryGetActivePlayer(command, out var audioPlayer))
+            {
+                await SendNoActivePlayerError(command);
+                return;
+            }
+
+            var index = command.Data.Options.FirstOrDefault()?.Value as int?;
+
+            if (index == null)
+            {
+                await command.RespondWithUserError(UserError.InvalidIndex);
+                return;
+            }
+
+            var track = audioPlayer.TrackQueue.ElementAtOrDefault((int)index);
+
+            if (track == null)
+            {
+                await command.RespondWithUserError(UserError.TrackNotFound);
+                return;
+            }
+
+            await audioPlayer.Delete(track);
+
+            var embed = new EmbedBuilder()
+               .WithDescription($"❌ Deleting \"**{track?.Title}**\"")
+               .WithColor(Color.DarkPurple)
+               .Build();
+
+            await command.RespondAsync(
+                embeds: new Embed[] { embed }
+            );
+        }
+
+
         private async Task HandleStopCommand(SocketSlashCommand command)
         {
             await TryRevokeLastMessageControls();
@@ -164,16 +196,14 @@ namespace Woofer.Core.Modules
 
             var track = await audioPlayer.Stop();
 
-            {
-                var embed = new EmbedBuilder()
-                   .WithDescription($"⏹️ Stopping \"**{track?.Title}**\"")
-                   .WithColor(Color.DarkPurple)
-                   .Build();
+            var embed = new EmbedBuilder()
+               .WithDescription($"⏹️ Stopping \"**{track?.Title}**\"")
+               .WithColor(Color.DarkPurple)
+               .Build();
 
-                await command.RespondAsync(
-                    embeds: new Embed[] { embed }
-                );
-            }
+            await command.RespondAsync(
+                embeds: new Embed[] { embed }
+            );
         }
 
         private async Task HandleSkipCommand(SocketSlashCommand command)
@@ -298,7 +328,7 @@ namespace Woofer.Core.Modules
             );
         }
 
-        private bool TryGetActivePlayer(IDiscordInteraction context, out AudioPlayer audioPlayer)
+        private bool TryGetActivePlayer(IDiscordInteraction context, out AudioPlayer? audioPlayer)
         {
             audioPlayer = _audioPlayerManager.GetAudioPlayer((ulong)context.GuildId);
 

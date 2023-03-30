@@ -4,6 +4,8 @@
     {
         NoTrackIsCurrentlyPlaying,
         UserNotInTheChannel,
-        CommandUnavailableInDms
+        CommandUnavailableInDms,
+        InvalidIndex,
+        TrackNotFound
     }
 }
