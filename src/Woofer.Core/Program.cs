@@ -128,20 +128,14 @@ namespace Woofer.Core
 
         private async Task OnButtonExecuted(SocketMessageComponent component)
         {
-            await Task.Run(() =>
-            {
-                _appModuleManager.RelayOnButtonExcecutedEvent(component);
-            });
+            _appModuleManager.InvokeButtonExcecuted(component);
         }
 
         private async Task OnSlashCommandExecuted(SocketSlashCommand command)
         {
             _logger.LogDebug($"Command received: /{command.CommandName} {string.Join(" ", command.Data.Options.Select(o => $"{o.Name}: {o.Value}"))}");
 
-            await Task.Run(() =>
-            {
-                _appModuleManager.RelayOnSlashCommandExecutedEvent(command);
-            });
+            _appModuleManager.InvokeOnSlashCommandExecuted(command);
         }
 
         private async void OnApplicationExit(object? sender, EventArgs e)

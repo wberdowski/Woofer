@@ -1,33 +1,64 @@
 ﻿using Discord;
 using Discord.WebSocket;
+using Microsoft.Extensions.Logging;
 using static Woofer.Core.Common.SlashCommandDefinition;
 
 namespace Woofer.Core.Common
 {
-    internal abstract class AppModule
+    internal abstract class AppModule<T> : IAppModule where T : class
     {
-        protected Dictionary<string, SlashCommandDefinition> RegisteredModuleCommands { get; } = new();
+        protected ILogger<T>? Logger { get; set; }
 
-        public virtual async Task HandleCommand(SocketSlashCommand command)
+        private Dictionary<string, SlashCommandDefinition> _registeredModuleCommands { get; } = new();
+
+        protected AppModule(ILogger<T>? logger)
         {
-            if (RegisteredModuleCommands.TryGetValue(command.CommandName, out var cmd))
+            Logger = logger;
+        }
+
+        public void InvokeHandleCommand(SocketSlashCommand command)
+        {
+            if (_registeredModuleCommands.TryGetValue(command.CommandName, out var cmd))
             {
-                await cmd.Method.Invoke(command);
+                Task.Run(async () =>
+                {
+                    await cmd.Method.Invoke(command);
+                }).ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        Logger?.LogError(t.Exception?.ToString());
+                    }
+                });
             }
         }
 
-        public virtual IEnumerable<ApplicationCommandProperties> RegisterCommands()
+        public void InvokeButtonExecuted(SocketMessageComponent component)
         {
-            var properties = RegisteredModuleCommands
+            Task.Run(async () =>
+            {
+                await HandleButtonExecuted(component);
+            }).ContinueWith(t =>
+            {
+                if (t.IsFaulted)
+                {
+                    Logger?.LogError(t.Exception?.ToString());
+                }
+            });
+        }
+
+        public virtual Task HandleButtonExecuted(SocketMessageComponent component)
+        {
+            return Task.CompletedTask;
+        }
+
+        public virtual IEnumerable<ApplicationCommandProperties> GetRegisteredCommands()
+        {
+            var properties = _registeredModuleCommands
                 .Select(cmd => cmd.Value.CommandProperties)
                 .Cast<ApplicationCommandProperties>();
 
             return properties;
-        }
-
-        public virtual async Task HandleButtonExecuted(SocketMessageComponent component)
-        {
-            await Task.CompletedTask;
         }
 
         protected void RegisterCommand(string name, string description, SlashCommandHandler handler, SlashCommandBuilder builder, params string[] aliases)
@@ -61,7 +92,7 @@ namespace Woofer.Core.Common
                 .WithName(name)
                 .WithDescription(description);
 
-            if (!RegisteredModuleCommands.TryAdd(name, new(b.Build(), handler)))
+            if (!_registeredModuleCommands.TryAdd(name, new(b.Build(), handler)))
             {
                 throw new ArgumentException($"Command with name \"{name}\" is already registered.");
             }

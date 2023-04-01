@@ -46,8 +46,8 @@ namespace Woofer.Core.Common
         {
             return services
                 .AddSingleton<AppModuleManager>()
-                .AddSingleton<AppModule, HelpModule>()
-                .AddSingleton<AppModule, AudioPlayerModule>();
+                .AddSingleton<IAppModule, HelpModule>()
+                .AddSingleton<IAppModule, AudioPlayerModule>();
         }
 
         public static IServiceCollection AddSearchServices(this IServiceCollection services)

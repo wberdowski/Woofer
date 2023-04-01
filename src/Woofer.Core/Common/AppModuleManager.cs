@@ -1,4 +1,5 @@
 ﻿using Discord;
+using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -9,7 +10,7 @@ namespace Woofer.Core.Common
         private readonly ILogger<AppModuleManager> _logger;
         private readonly IServiceProvider _serviceProvider;
 
-        private IEnumerable<AppModule> _modules;
+        private IEnumerable<IAppModule> _modules;
 
         public AppModuleManager(ILogger<AppModuleManager> logger, IServiceProvider serviceProvider)
         {
@@ -19,7 +20,7 @@ namespace Woofer.Core.Common
 
         public void LoadModules()
         {
-            _modules = (IEnumerable<AppModule>)_serviceProvider.GetServices(typeof(AppModule));
+            _modules = (IEnumerable<IAppModule>)_serviceProvider.GetServices(typeof(IAppModule));
             _logger.LogDebug($"{_modules.Count()} module(s) loaded.");
         }
 
@@ -29,58 +30,62 @@ namespace Woofer.Core.Common
 
             foreach (var module in _modules)
             {
-                var commands = module.RegisterCommands();
+                var commands = module.GetRegisteredCommands();
                 properties.AddRange(commands);
             }
 
             return properties.ToArray();
         }
 
-        public void RelayOnButtonExcecutedEvent(Discord.WebSocket.SocketMessageComponent component)
+        public void InvokeButtonExcecuted(SocketMessageComponent component)
         {
-            Parallel.ForEach(_modules, async module =>
+            foreach (var module in _modules)
             {
                 try
                 {
-                    await module.HandleButtonExecuted(component);
+                    module.HandleButtonExecuted(component);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, ex.Message);
                 }
-            });
+            }
         }
 
-        public void RelayOnSlashCommandExecutedEvent(Discord.WebSocket.SocketSlashCommand command)
+        public void InvokeOnSlashCommandExecuted(SocketSlashCommand command)
         {
-            Parallel.ForEach(_modules, async module =>
+            foreach (var module in _modules)
             {
                 try
                 {
-                    await module.HandleCommand(command);
+                    module.InvokeHandleCommand(command);
                 }
                 catch (Exception ex)
                 {
-                    var embed = new EmbedBuilder()
-                        .WithAuthor($"❌ An internal error occured. Please contact bot's administrator.")
-                        .WithColor(Color.Red)
-                        .Build();
-
-                    try
+                    Task.Run(() => TryRespondWithInternalError(command))
+                    .ContinueWith(t =>
                     {
-                        await command.ModifyOriginalResponseAsync((m) =>
+                        if (t.IsFaulted)
                         {
-                            m.Components = null;
-                            m.Embed = embed;
-                        });
-                    }
-                    catch (Exception e)
-                    {
-
-                    }
-
-                    _logger.LogError(ex, ex.Message);
+                            _logger.LogError(t.Exception?.ToString());
+                        }
+                    });
+                    _logger.LogError(ex.ToString());
                 }
+            }
+        }
+
+        private async Task TryRespondWithInternalError(SocketSlashCommand command)
+        {
+            var embed = new EmbedBuilder()
+                .WithAuthor($"❌ An internal error occured. Please contact bot's administrator.")
+                .WithColor(Color.Red)
+                .Build();
+
+            await command.ModifyOriginalResponseAsync((m) =>
+            {
+                m.Components = null;
+                m.Embed = embed;
             });
         }
     }

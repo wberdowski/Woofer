@@ -9,21 +9,19 @@ using Woofer.Core.Modules.Extensions;
 
 namespace Woofer.Core.Modules
 {
-    internal class AudioPlayerModule : AppModule
+    internal class AudioPlayerModule : AppModule<AudioPlayerModule>
     {
         private readonly SearchProvider _searchProvider;
         private readonly AudioPlayerManager _audioPlayerManager;
-        private readonly ILogger _logger;
         private PlayMessageInfo? _lastPlayMessage;
 
-        public AudioPlayerModule(AudioPlayerManager audioPlayerManager, ILogger<AudioPlayerModule> logger, SearchProvider searchProvider)
+        public AudioPlayerModule(ILogger<AudioPlayerModule> logger, AudioPlayerManager audioPlayerManager, SearchProvider searchProvider) : base(logger)
         {
             _audioPlayerManager = audioPlayerManager;
-            _logger = logger;
             _searchProvider = searchProvider;
         }
 
-        public override IEnumerable<ApplicationCommandProperties> RegisterCommands()
+        public override IEnumerable<ApplicationCommandProperties> GetRegisteredCommands()
         {
             RegisterCommand("play", "Play an audio track from YouTube.", HandlePlayCommand, new SlashCommandBuilder()
                 .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
@@ -37,7 +35,7 @@ namespace Woofer.Core.Modules
             RegisterCommand("pause", "Pause currently playing track.", HandlePauseCommand);
             RegisterCommand("resume", "Resume currently playing track.", HandleResumeCommand);
 
-            return base.RegisterCommands();
+            return base.GetRegisteredCommands();
         }
 
         public override async Task HandleButtonExecuted(SocketMessageComponent component)
