@@ -8,6 +8,6 @@ namespace Woofer.Core.Interfaces
         Task HandleButtonExecuted(SocketMessageComponent component);
         void InvokeButtonExecuted(SocketMessageComponent component);
         void InvokeHandleCommand(SocketSlashCommand command);
-        IEnumerable<ApplicationCommandProperties> GetRegisteredCommands();
+        IEnumerable<ApplicationCommandProperties> RegisterCommands();
     }
 }

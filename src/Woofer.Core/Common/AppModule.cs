@@ -1,6 +1,8 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
+using Woofer.Core.Helpers;
 using Woofer.Core.Interfaces;
 using static Woofer.Core.Common.SlashCommandDefinition;
 
@@ -29,7 +31,7 @@ namespace Woofer.Core.Common
                     {
                         Logger?.LogError(t.Exception?.ToString());
 
-                        TryRespondWithInternalError(command)
+                        TryRespondWithInternalError(command, t.Exception)
                         .ContinueWith(t =>
                         {
                             if (t.IsFaulted)
@@ -61,7 +63,7 @@ namespace Woofer.Core.Common
             return Task.CompletedTask;
         }
 
-        public virtual IEnumerable<ApplicationCommandProperties> GetRegisteredCommands()
+        public virtual IEnumerable<ApplicationCommandProperties> RegisterCommands()
         {
             var properties = _registeredModuleCommands
                 .Select(cmd => cmd.Value.CommandProperties)
@@ -107,16 +109,29 @@ namespace Woofer.Core.Common
             }
         }
 
-        private async Task TryRespondWithInternalError(SocketSlashCommand command)
+        private async Task TryRespondWithInternalError(SocketSlashCommand command, Exception ex)
         {
+            var details = $"Version: {AssemblyHelper.GetVersion()}\n" +
+                $"Date: {DateTime.UtcNow}\n" +
+                $"OS: {Environment.OSVersion}\n" +
+                $"Memory: {Process.GetCurrentProcess().PrivateMemorySize64 / 1024 / 1024}MB\n" +
+                $"\n" +
+                $"{ex}";
+
             var embed = new EmbedBuilder()
-                .WithAuthor($"❌ An internal error occured. Please contact bot's administrator.")
+                .WithAuthor($"❌ An internal error occured while executing /{command.CommandName} command.")
+                .WithDescription(
+                    $"If this error persists, please report it with all the necessary details at https://github.com/wberdowski/Woofer/issues\n" +
+                    $"```fix\n" +
+                    $"Checksum: {(uint)details.GetHashCode()}\n" +
+                    $"{details}```"
+                )
                 .WithColor(Color.Red)
                 .Build();
 
             if (!command.HasResponded)
             {
-                await command.RespondAsync(embed: embed);
+                await command.RespondAsync(embed: embed, ephemeral: true);
                 return;
             }
 

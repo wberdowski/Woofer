@@ -20,7 +20,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             _searchProvider = searchProvider;
         }
 
-        public override IEnumerable<ApplicationCommandProperties> GetRegisteredCommands()
+        public override IEnumerable<ApplicationCommandProperties> RegisterCommands()
         {
             RegisterCommand("play", "Play an audio track from YouTube.", HandlePlayCommand, new SlashCommandBuilder()
                 .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
@@ -34,7 +34,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             RegisterCommand("pause", "Pause currently playing track.", HandlePauseCommand);
             RegisterCommand("resume", "Resume currently playing track.", HandleResumeCommand);
 
-            return base.GetRegisteredCommands();
+            return base.RegisterCommands();
         }
 
         public override async Task HandleButtonExecuted(SocketMessageComponent component)

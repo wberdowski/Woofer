@@ -31,7 +31,7 @@ namespace Woofer.Core.Common
 
             foreach (var module in _modules)
             {
-                var commands = module.GetRegisteredCommands();
+                var commands = module.RegisterCommands();
                 properties.AddRange(commands);
             }
 
