@@ -2,10 +2,10 @@
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using System.Reflection;
 using Woofer.Core.Config;
 using Woofer.Core.Interfaces;
 using Woofer.Core.Modules.AudioPlayerModule;
-using Woofer.Core.Modules.HelpModule;
 using YoutubeExplode;
 
 namespace Woofer.Core.Common
@@ -45,10 +45,20 @@ namespace Woofer.Core.Common
 
         public static IServiceCollection AddBotModules(this IServiceCollection services)
         {
-            return services
-                .AddSingleton<AppModuleManager>()
-                .AddSingleton<IAppModule, HelpModule>()
-                .AddSingleton<IAppModule, AudioPlayerModule>();
+            var moduleTypes = Assembly.GetExecutingAssembly()
+                .GetTypes()
+                .Where(t =>
+                    t.BaseType != null &&
+                    t.BaseType.IsGenericType &&
+                    t.BaseType.GetGenericTypeDefinition() == typeof(AppModule<>)
+                );
+
+            foreach (var moduleType in moduleTypes)
+            {
+                services = services.AddSingleton(typeof(IAppModule), moduleType);
+            }
+
+            return services.AddSingleton<AppModuleManager>();
         }
 
         public static IServiceCollection AddSearchServices(this IServiceCollection services)

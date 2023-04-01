@@ -7,8 +7,11 @@ namespace Woofer.Core.Modules.HelpModule
 {
     internal class HelpModule : AppModule<HelpModule>
     {
-        public HelpModule(ILogger<HelpModule>? logger) : base(logger)
+        private readonly AppModuleManager _appModuleManager;
+
+        public HelpModule(ILogger<HelpModule>? logger, AppModuleManager appModuleManager) : base(logger)
         {
+            _appModuleManager = appModuleManager;
         }
 
         public override IEnumerable<ApplicationCommandProperties> GetRegisteredCommands()
@@ -20,8 +23,6 @@ namespace Woofer.Core.Modules.HelpModule
 
         private async Task HandleHelpCommand(SocketSlashCommand command)
         {
-            throw new Exception("Elo");
-
             await command.RespondAsync("**Commands**\n" +
                 "- /play\n" +
                 "- /stop",

@@ -9,7 +9,6 @@ namespace Woofer.Core.Common
     internal abstract class AppModule<T> : IAppModule where T : class
     {
         protected ILogger<T>? Logger { get; set; }
-
         private Dictionary<string, SlashCommandDefinition> _registeredModuleCommands { get; } = new();
 
         protected AppModule(ILogger<T>? logger)
