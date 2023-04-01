@@ -1,4 +1,4 @@
-﻿namespace Woofer.Core.Audio
+﻿namespace Woofer.Core.Modules.AudioPlayerModule
 {
     public struct WebAudioSource
     {

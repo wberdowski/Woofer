@@ -3,7 +3,7 @@ using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 using Woofer.Core.Common;
 
-namespace Woofer.Core.Modules
+namespace Woofer.Core.Modules.HelpModule
 {
     internal class HelpModule : AppModule<HelpModule>
     {
@@ -20,6 +20,8 @@ namespace Woofer.Core.Modules
 
         private async Task HandleHelpCommand(SocketSlashCommand command)
         {
+            throw new Exception("Elo");
+
             await command.RespondAsync("**Commands**\n" +
                 "- /play\n" +
                 "- /stop",

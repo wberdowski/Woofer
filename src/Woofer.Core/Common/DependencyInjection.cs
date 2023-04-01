@@ -2,9 +2,10 @@
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using Woofer.Core.Audio;
 using Woofer.Core.Config;
-using Woofer.Core.Modules;
+using Woofer.Core.Interfaces;
+using Woofer.Core.Modules.AudioPlayerModule;
+using Woofer.Core.Modules.HelpModule;
 using YoutubeExplode;
 
 namespace Woofer.Core.Common

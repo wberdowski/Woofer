@@ -1,7 +1,6 @@
 ﻿using Discord;
-using Woofer.Core.Audio;
 
-namespace Woofer.Core.Common
+namespace Woofer.Core.Modules.AudioPlayerModule
 {
     internal class PlayMessageInfo
     {

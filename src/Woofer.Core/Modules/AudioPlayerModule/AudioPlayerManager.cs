@@ -4,7 +4,7 @@ using ManagedBass;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Woofer.Core.Audio
+namespace Woofer.Core.Modules.AudioPlayerModule
 {
     internal class AudioPlayerManager
     {

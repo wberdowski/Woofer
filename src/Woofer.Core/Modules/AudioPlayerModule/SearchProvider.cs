@@ -1,7 +1,6 @@
-﻿using Woofer.Core.Audio;
-using YoutubeExplode;
+﻿using YoutubeExplode;
 
-namespace Woofer.Core.Common
+namespace Woofer.Core.Modules.AudioPlayerModule
 {
     internal class SearchProvider
     {

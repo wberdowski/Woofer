@@ -1,6 +1,7 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
+using Woofer.Core.Interfaces;
 using static Woofer.Core.Common.SlashCommandDefinition;
 
 namespace Woofer.Core.Common
@@ -28,6 +29,15 @@ namespace Woofer.Core.Common
                     if (t.IsFaulted)
                     {
                         Logger?.LogError(t.Exception?.ToString());
+
+                        TryRespondWithInternalError(command)
+                        .ContinueWith(t =>
+                        {
+                            if (t.IsFaulted)
+                            {
+                                Logger?.LogError(t.Exception?.ToString());
+                            }
+                        });
                     }
                 });
             }
@@ -96,6 +106,26 @@ namespace Woofer.Core.Common
             {
                 throw new ArgumentException($"Command with name \"{name}\" is already registered.");
             }
+        }
+
+        private async Task TryRespondWithInternalError(SocketSlashCommand command)
+        {
+            var embed = new EmbedBuilder()
+                .WithAuthor($"❌ An internal error occured. Please contact bot's administrator.")
+                .WithColor(Color.Red)
+                .Build();
+
+            if (!command.HasResponded)
+            {
+                await command.RespondAsync(embed: embed);
+                return;
+            }
+
+            await command.ModifyOriginalResponseAsync((m) =>
+            {
+                m.Components = null;
+                m.Embed = embed;
+            });
         }
     }
 }

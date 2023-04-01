@@ -1,8 +1,8 @@
-﻿namespace Woofer.Core.Audio
+﻿namespace Woofer.Core.Modules.AudioPlayerModule
 {
     public abstract class Track
     {
-        public string Id => new string(((uint)GetHashCode()).ToString().Select(c=> (char)((c - '0') + 'a')).ToArray()).ToUpper();
+        public string Id => new string(((uint)GetHashCode()).ToString().Select(c => (char)(c - '0' + 'a')).ToArray()).ToUpper();
         public string Title { get; }
         public TimeSpan? Duration { get; }
         public TimeSpan? ResumeTime { get; }

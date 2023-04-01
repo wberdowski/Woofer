@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace Woofer.Core.Common
+namespace Woofer.Core.Helpers
 {
     internal static class AssemblyHelper
     {

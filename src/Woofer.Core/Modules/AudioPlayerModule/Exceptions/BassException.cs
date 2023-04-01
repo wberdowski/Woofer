@@ -1,7 +1,7 @@
 ﻿using ManagedBass;
 using System.Runtime.Serialization;
 
-namespace Woofer.Core.Exceptions
+namespace Woofer.Core.Modules.AudioPlayerModule.Exceptions
 {
     [Serializable]
     internal class BassException : Exception

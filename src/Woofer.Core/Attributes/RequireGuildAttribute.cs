@@ -1,4 +1,4 @@
-﻿namespace Woofer.Core.Modules.Attributes
+﻿namespace Woofer.Core.Attributes
 {
     [AttributeUsage(AttributeTargets.Method)]
     internal class RequireGuildAttribute : Attribute

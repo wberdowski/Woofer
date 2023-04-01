@@ -2,6 +2,7 @@
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Woofer.Core.Interfaces;
 
 namespace Woofer.Core.Common
 {
@@ -56,37 +57,8 @@ namespace Woofer.Core.Common
         {
             foreach (var module in _modules)
             {
-                try
-                {
-                    module.InvokeHandleCommand(command);
-                }
-                catch (Exception ex)
-                {
-                    Task.Run(() => TryRespondWithInternalError(command))
-                    .ContinueWith(t =>
-                    {
-                        if (t.IsFaulted)
-                        {
-                            _logger.LogError(t.Exception?.ToString());
-                        }
-                    });
-                    _logger.LogError(ex.ToString());
-                }
+                module.InvokeHandleCommand(command);
             }
-        }
-
-        private async Task TryRespondWithInternalError(SocketSlashCommand command)
-        {
-            var embed = new EmbedBuilder()
-                .WithAuthor($"❌ An internal error occured. Please contact bot's administrator.")
-                .WithColor(Color.Red)
-                .Build();
-
-            await command.ModifyOriginalResponseAsync((m) =>
-            {
-                m.Components = null;
-                m.Embed = embed;
-            });
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace Woofer.Core.Common.Enums
+﻿namespace Woofer.Core.Modules.Common.Enums
 {
     internal enum UserError
     {

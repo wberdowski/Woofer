@@ -8,15 +8,16 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Woofer.Core.Common;
 using Woofer.Core.Config;
+using Woofer.Core.Helpers;
 
 namespace Woofer.Core
 {
     internal class Program
     {
         private readonly IServiceProvider _serviceProvider;
-        private ConfigManager _configManager;
+        private readonly ConfigManager _configManager;
         private DiscordSocketClient _client;
-        private ILogger _logger;
+        private readonly ILogger _logger;
         private readonly AppModuleManager _appModuleManager;
 
         public Program()

@@ -1,13 +1,12 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
-using Woofer.Core.Audio;
+using Woofer.Core.Attributes;
 using Woofer.Core.Common;
-using Woofer.Core.Common.Enums;
-using Woofer.Core.Modules.Attributes;
-using Woofer.Core.Modules.Extensions;
+using Woofer.Core.Modules.Common.Enums;
+using Woofer.Core.Modules.Common.Extensions;
 
-namespace Woofer.Core.Modules
+namespace Woofer.Core.Modules.AudioPlayerModule
 {
     internal class AudioPlayerModule : AppModule<AudioPlayerModule>
     {

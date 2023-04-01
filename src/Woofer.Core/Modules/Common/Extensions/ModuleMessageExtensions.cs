@@ -1,9 +1,9 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using System.Text.RegularExpressions;
-using Woofer.Core.Common.Enums;
+using Woofer.Core.Modules.Common.Enums;
 
-namespace Woofer.Core.Modules.Extensions
+namespace Woofer.Core.Modules.Common.Extensions
 {
     internal static class ModuleMessageExtensions
     {

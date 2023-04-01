@@ -3,7 +3,7 @@ using ManagedBass;
 using Microsoft.Extensions.Logging;
 using System.Buffers;
 
-namespace Woofer.Core.Audio
+namespace Woofer.Core.Modules.AudioPlayerModule
 {
     internal class AudioPlayer : IDisposable
     {
@@ -287,8 +287,7 @@ namespace Woofer.Core.Audio
                 _logger.LogDebug($"Playback ended: {track.Title}");
             }
 
-            var result = TryStopConsumeAndPlay(true);
-            _logger.LogDebug($"Autoplay next = {result}");
+            TryStopConsumeAndPlay(true);
         }
 
         public void Dispose()
