@@ -1,105 +1,51 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
-using System.Reflection.Emit;
-using Woofer.Core.Audio;
+using Woofer.Core.Attributes;
 using Woofer.Core.Common;
-using Woofer.Core.Common.Enums;
-using Woofer.Core.Modules.Extensions;
-using YoutubeExplode;
+using Woofer.Core.Modules.Common.Enums;
+using Woofer.Core.Modules.Common.Extensions;
 
-namespace Woofer.Core.Modules
+namespace Woofer.Core.Modules.AudioPlayerModule
 {
-    internal class AudioPlayerModule : AppModule
+    internal class AudioPlayerModule : AppModule<AudioPlayerModule>
     {
-        private readonly YoutubeClient _ytClient;
+        private readonly SearchProvider _searchProvider;
         private readonly AudioPlayerManager _audioPlayerManager;
-        private readonly ILogger _logger;
-        private SocketSlashCommand? _lastAddToQueueMessage;
-        private Embed? _lastAddToQueueMessageEmbed;
-        private Track? _lastAddToQueueMessageTrack;
+        private PlayMessageInfo? _lastPlayMessage;
 
-        public AudioPlayerModule(YoutubeClient client, AudioPlayerManager audioPlayerManager, ILogger<AudioPlayerModule> logger)
+        public AudioPlayerModule(ILogger<AudioPlayerModule> logger, AudioPlayerManager audioPlayerManager, SearchProvider searchProvider) : base(logger)
         {
-            _ytClient = client;
             _audioPlayerManager = audioPlayerManager;
-            _logger = logger;
+            _searchProvider = searchProvider;
         }
 
         public override IEnumerable<ApplicationCommandProperties> RegisterCommands()
         {
-            var properties = new List<ApplicationCommandProperties>
-            {
-                new SlashCommandBuilder()
-                    .WithName("play")
-                    .WithDescription("Play an audio track from YouTube.")
-                    .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true)
-                    .Build(),
+            RegisterCommand("play", "Play an audio track from YouTube.", HandlePlayCommand, new SlashCommandBuilder()
+                .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
 
-                new SlashCommandBuilder()
-                    .WithName("stop")
-                    .WithDescription("Stop currently playing song.")
-                    .Build(),
+            RegisterCommand("delete", "Delete track at the provided position.", HandleDeleteCommand, new SlashCommandBuilder()
+                .AddOption("track-position", ApplicationCommandOptionType.Integer, "Track position in the queue.", isRequired: true));
 
-                new SlashCommandBuilder()
-                    .WithName("skip")
-                    .WithDescription("Skip current song and play next in the queue.")
-                    .Build(),
+            RegisterCommand("stop", "Stop currently playing track.", HandleStopCommand);
+            RegisterCommand("skip", "Skip current track and play next in the queue.", HandleSkipCommand, "next");
+            RegisterCommand("queue", "Show currently playing track and the queue.", HandleQueueCommand, "current", "nowplaying");
+            RegisterCommand("pause", "Pause currently playing track.", HandlePauseCommand);
+            RegisterCommand("resume", "Resume currently playing track.", HandleResumeCommand);
 
-                new SlashCommandBuilder()
-                    .WithName("next")
-                    .WithDescription("Skip current song and play next in the queue.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("queue")
-                    .WithDescription("Show currently playing song and the queue.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("current")
-                    .WithDescription("Show currently playing song and the queue.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("pause")
-                    .WithDescription("Pause currently playing song.")
-                    .Build(),
-
-                new SlashCommandBuilder()
-                    .WithName("resume")
-                    .WithDescription("Resume currently playing song.")
-                    .Build()
-            };
-
-            return properties;
-        }
-
-        public override async Task HandleCommand(SocketSlashCommand command)
-        {
-            var task = command.CommandName switch
-            {
-                "play" or "p" => HandlePlayCommand(command),
-                "stop" => HandleStopCommand(command),
-                "skip" or "next" => HandleSkipCommand(command),
-                "queue" or "current" => HandleQueueCommand(command),
-                "pause" => HandlePauseCommand(command),
-                "resume" => HandleResumeCommand(command),
-                _ => Task.CompletedTask
-            };
+            return base.RegisterCommands();
         }
 
         public override async Task HandleButtonExecuted(SocketMessageComponent component)
         {
-            // TODO
-
             if (!TryGetActivePlayer(component, out var audioPlayer))
             {
                 await SendNoActivePlayerError(component);
                 return;
             }
 
-            if (_lastAddToQueueMessage == null || _lastAddToQueueMessageEmbed == null || _lastAddToQueueMessageTrack == null)
+            if (_lastPlayMessage == null)
             {
                 return;
             }
@@ -107,9 +53,9 @@ namespace Woofer.Core.Modules
             switch (component.Data.CustomId)
             {
                 case "play-now-button":
-                    if (await audioPlayer.TryPlayNow(_lastAddToQueueMessageTrack))
+                    if (await audioPlayer.TryPlayNow(_lastPlayMessage.Track))
                     {
-                        await TryRevokeLastMessageControls();
+                        _lastPlayMessage?.TryRevokeControls().Wait();
                         break;
                     }
 
@@ -118,9 +64,9 @@ namespace Woofer.Core.Modules
                     break;
 
                 case "play-next-button":
-                    if (await audioPlayer.TryEnqueueNext(_lastAddToQueueMessageTrack))
+                    if (await audioPlayer.TryEnqueueNext(_lastPlayMessage.Track))
                     {
-                        await TryRevokeLastMessageControls();
+                        _lastPlayMessage?.TryRevokeControls().Wait();
                         break;
                     }
 
@@ -129,20 +75,24 @@ namespace Woofer.Core.Modules
                     break;
 
                 case "delete-button":
-                    await audioPlayer.Delete(_lastAddToQueueMessageTrack);
-                    await TryRevokeLastMessageControls();
+                    await audioPlayer.Delete(_lastPlayMessage.Track);
+                    await _lastPlayMessage.Interaction.DeleteOriginalResponseAsync();
                     break;
             }
         }
 
+        [RequireGuild]
         private async Task HandlePlayCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            var channel = (command.User as IGuildUser)?.VoiceChannel;
 
-            if (command.GuildId == null)
+            if (channel == null)
             {
+                await command.RespondWithUserError(UserError.UserNotInTheChannel);
                 return;
             }
+
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             var searchQuery = command.Data.Options.First().Value.ToString();
 
@@ -153,34 +103,12 @@ namespace Woofer.Core.Modules
                    .Build();
 
                 await command.RespondAsync(
-                   embeds: new Embed[] { embed },
-                   ephemeral: true
-               );
+                    embeds: new Embed[] { embed },
+                    ephemeral: true
+                );
             }
 
-            var results = _ytClient.Search.GetResultsAsync(searchQuery);
-            var result = results.FirstAsync().Result;
-            var video = await _ytClient.Videos.GetAsync(result.Url);
-            var manifest = await _ytClient.Videos.Streams.GetManifestAsync(result.Url);
-
-            // Select best quality
-            var audioSource = manifest.GetAudioOnlyStreams()
-                .Where(x => x.AudioCodec == "opus")
-                .OrderByDescending(x => x.Bitrate.KiloBitsPerSecond)
-                .First();
-
-            var track = new WebSearchResult(
-                video.Title,
-                video.Duration,
-                TimeSpan.Zero,
-                video.Url,
-                video.Thumbnails.FirstOrDefault()?.Url,
-                new WebAudioSource(
-                    (int)Math.Ceiling(audioSource.Bitrate.KiloBitsPerSecond),
-                    audioSource.AudioCodec,
-                    audioSource.Url
-                )
-            );
+            var track = await _searchProvider.Search(searchQuery);
 
             {
                 var embed = new EmbedBuilder()
@@ -205,25 +133,53 @@ namespace Woofer.Core.Modules
                     p.Components = components;
                 });
 
-                _lastAddToQueueMessage = command;
-                _lastAddToQueueMessageEmbed = embed;
-                _lastAddToQueueMessageTrack = track;
-            }
-
-            var channel = (command.User as IGuildUser)?.VoiceChannel;
-            if (channel == null)
-            {
-                await command.RespondAsync("User not in the channel.");
-                return;
+                _lastPlayMessage = new PlayMessageInfo(command, embed, track);
             }
 
             var audioPlayer = await _audioPlayerManager.RequestAudioPlayerAtChannel((ulong)command.GuildId, channel);
             await audioPlayer.Enqueue(track);
         }
 
+        private async Task HandleDeleteCommand(SocketSlashCommand command)
+        {
+            if (!TryGetActivePlayer(command, out var audioPlayer))
+            {
+                await SendNoActivePlayerError(command);
+                return;
+            }
+
+            var index = command.Data.Options.FirstOrDefault()?.Value as long?;
+
+            if (index == null || index < 1)
+            {
+                await command.RespondWithUserError(UserError.InvalidTrackPosition);
+                return;
+            }
+
+            var track = audioPlayer.TrackQueue.ElementAtOrDefault((int)index - 1);
+
+            if (track == null)
+            {
+                await command.RespondWithUserError(UserError.TrackNotFound);
+                return;
+            }
+
+            await audioPlayer.Delete(track);
+
+            var embed = new EmbedBuilder()
+               .WithDescription($"🗑 Deleting \"**{track?.Title}**\"")
+               .WithColor(Color.DarkPurple)
+               .Build();
+
+            await command.RespondAsync(
+                embeds: new Embed[] { embed }
+            );
+        }
+
+
         private async Task HandleStopCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             if (!TryGetActivePlayer(command, out var audioPlayer))
             {
@@ -233,21 +189,19 @@ namespace Woofer.Core.Modules
 
             var track = await audioPlayer.Stop();
 
-            {
-                var embed = new EmbedBuilder()
-                   .WithDescription($"⏹️ Stopping \"**{track?.Title}**\"")
-                   .WithColor(Color.DarkPurple)
-                   .Build();
+            var embed = new EmbedBuilder()
+               .WithDescription($"⏹️ Stopping \"**{track?.Title}**\"")
+               .WithColor(Color.DarkPurple)
+               .Build();
 
-                await command.RespondAsync(
-                    embeds: new Embed[] { embed }
-                );
-            }
+            await command.RespondAsync(
+                embeds: new Embed[] { embed }
+            );
         }
 
         private async Task HandleSkipCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             if (!TryGetActivePlayer(command, out var audioPlayer))
             {
@@ -269,7 +223,7 @@ namespace Woofer.Core.Modules
 
         private async Task HandlePauseCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             if (!TryGetActivePlayer(command, out var audioPlayer))
             {
@@ -297,7 +251,7 @@ namespace Woofer.Core.Modules
 
         private async Task HandleResumeCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             if (!TryGetActivePlayer(command, out var audioPlayer))
             {
@@ -337,11 +291,16 @@ namespace Woofer.Core.Modules
 
             var queue = string.Join("\n", audioPlayer.TrackQueue.Select((song, i) =>
             {
-                return $"{i + 1} - {song.Title} {song.Duration} - {song.AudioSource.Codec} {song.AudioSource.Bitrate} kbps - {song.Id}``";
+                return $"> *{i + 1}* - ``{song.Duration}`` - **{song.Title}**\n";
             }));
 
+            if (!audioPlayer.TrackQueue.Any())
+            {
+                queue = "No tracks in the queue.";
+            }
+
             var embedBuilder = new EmbedBuilder()
-                .WithAuthor($"🎵 NOW PLAYING")
+                .WithAuthor($"🎵 Now playing:")
                 .WithDescription($"**☰ Queue**\n{queue}")
                 .WithColor(Color.DarkPurple)
                 .WithFooter($"Total duration: {totalDuration}");
@@ -356,7 +315,7 @@ namespace Woofer.Core.Modules
             else
             {
                 embedBuilder = embedBuilder
-                    .WithTitle($"❌ No track is currently playing");
+                    .WithTitle($"Nothing is currently playing 😴");
             }
 
             var embed = embedBuilder.Build();
@@ -367,7 +326,7 @@ namespace Woofer.Core.Modules
             );
         }
 
-        private bool TryGetActivePlayer(IDiscordInteraction context, out AudioPlayer audioPlayer)
+        private bool TryGetActivePlayer(IDiscordInteraction context, out AudioPlayer? audioPlayer)
         {
             audioPlayer = _audioPlayerManager.GetAudioPlayer((ulong)context.GuildId);
 
@@ -385,26 +344,6 @@ namespace Woofer.Core.Modules
                 embeds: new Embed[] { embed },
                 ephemeral: true
             );
-        }
-
-        private async Task<bool> TryRevokeLastMessageControls()
-        {
-            if (_lastAddToQueueMessage != null && _lastAddToQueueMessageEmbed != null && _lastAddToQueueMessageTrack != null)
-            {
-                await _lastAddToQueueMessage.ModifyOriginalResponseAsync(m =>
-                {
-                    m.Embed = _lastAddToQueueMessageEmbed;
-                    m.Components = null;
-                });
-
-                _lastAddToQueueMessage = null;
-                _lastAddToQueueMessageEmbed = null;
-                _lastAddToQueueMessageTrack = null;
-
-                return true;
-            }
-
-            return false;
         }
     }
 }

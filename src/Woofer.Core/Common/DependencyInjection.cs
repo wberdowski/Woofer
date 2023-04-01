@@ -1,11 +1,11 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Woofer.Core.Audio;
-using Woofer.Core.Common.Interfaces;
+using Serilog;
+using System.Reflection;
 using Woofer.Core.Config;
-using Woofer.Core.Modules;
+using Woofer.Core.Interfaces;
+using Woofer.Core.Modules.AudioPlayerModule;
 using YoutubeExplode;
 
 namespace Woofer.Core.Common
@@ -14,20 +14,20 @@ namespace Woofer.Core.Common
     {
         public static IServiceCollection AddBotServices(this IServiceCollection services)
         {
+            var logger = new LoggerConfiguration()
+#if DEBUG
+            .MinimumLevel.Debug()
+#else
+            .MinimumLevel.Information()
+#endif
+            .WriteTo.File("logs/log.txt", rollingInterval: RollingInterval.Day)
+            .WriteTo.Console()
+            .CreateLogger();
+
             return services
                 .AddLogging(c =>
                 {
-#if DEBUG
-                    c.SetMinimumLevel(LogLevel.Debug);
-#else
-                    c.SetMinimumLevel(LogLevel.Information);
-#endif
-                    c.AddSimpleConsole(o =>
-                    {
-                        o.UseUtcTimestamp = true;
-                        o.TimestampFormat = "HH:mm:ss ";
-                        o.SingleLine = false;
-                    });
+                    c.AddSerilog(logger);
                 })
                 .AddConfig()
                 .AddDiscord()
@@ -45,15 +45,27 @@ namespace Woofer.Core.Common
 
         public static IServiceCollection AddBotModules(this IServiceCollection services)
         {
-            return services
-                .AddSingleton<IAppModule, HelpModule>()
-                .AddSingleton<IAppModule, AudioPlayerModule>();
+            var moduleTypes = Assembly.GetExecutingAssembly()
+                .GetTypes()
+                .Where(t =>
+                    t.BaseType != null &&
+                    t.BaseType.IsGenericType &&
+                    t.BaseType.GetGenericTypeDefinition() == typeof(AppModule<>)
+                );
+
+            foreach (var moduleType in moduleTypes)
+            {
+                services = services.AddSingleton(typeof(IAppModule), moduleType);
+            }
+
+            return services.AddSingleton<AppModuleManager>();
         }
 
         public static IServiceCollection AddSearchServices(this IServiceCollection services)
         {
             return services
-                .AddSingleton<YoutubeClient>();
+                .AddSingleton<YoutubeClient>()
+                .AddSingleton<SearchProvider>();
         }
 
         private static IServiceCollection AddDiscord(this IServiceCollection services)

@@ -5,25 +5,29 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using Woofer.Core.Common;
-using Woofer.Core.Common.Interfaces;
 using Woofer.Core.Config;
+using Woofer.Core.Helpers;
 
 namespace Woofer.Core
 {
     internal class Program
     {
         private readonly IServiceProvider _serviceProvider;
-        private ConfigManager _configManager;
+        private readonly ConfigManager _configManager;
         private DiscordSocketClient _client;
-        private ILogger _logger;
-        private IEnumerable<IAppModule> _modules;
+        private readonly ILogger _logger;
+        private readonly AppModuleManager _appModuleManager;
 
         public Program()
         {
             _serviceProvider = CreateServices();
+
+            _logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
+            _configManager = _serviceProvider.GetRequiredService<ConfigManager>();
+            _appModuleManager = _serviceProvider.GetRequiredService<AppModuleManager>();
+
         }
 
         private IServiceProvider CreateServices()
@@ -46,15 +50,13 @@ namespace Woofer.Core
                 Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
             }
 
-            SetupLogging();
-
-            var assemblyName = Assembly.GetExecutingAssembly().GetName();
-            _logger.LogInformation($"Woofer v{assemblyName.Version?.ToString(3)}");
+            var version = AssemblyHelper.GetVersion();
+            _logger.LogInformation($"Woofer v{version}");
 
             try
             {
+                _appModuleManager.LoadModules();
                 await SetupConfig();
-                SetupModules();
                 await SetupDiscord();
             }
             catch (Exception ex)
@@ -67,14 +69,8 @@ namespace Woofer.Core
             await Task.Delay(Timeout.Infinite);
         }
 
-        private void SetupLogging()
-        {
-            _logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
-        }
-
         private async Task SetupConfig()
         {
-            _configManager = _serviceProvider.GetRequiredService<ConfigManager>();
             await _configManager.Load();
 
             if (_configManager.Config == null)
@@ -100,12 +96,6 @@ namespace Woofer.Core
             await _client.StartAsync();
         }
 
-        private void SetupModules()
-        {
-            _modules = (IEnumerable<IAppModule>)_serviceProvider.GetServices(typeof(IAppModule));
-            _logger.LogDebug($"{_modules.Count()} module(s) loaded.");
-        }
-
         private Task Log(LogMessage msg)
         {
             var severity = msg.Severity switch
@@ -127,15 +117,7 @@ namespace Woofer.Core
         {
             try
             {
-
-                var properties = new List<ApplicationCommandProperties>();
-
-                foreach (var module in _modules)
-                {
-                    var commands = module.RegisterCommands();
-                    properties.AddRange(commands);
-                }
-
+                var properties = _appModuleManager.GetRegisteredCommands();
                 await _client.BulkOverwriteGlobalApplicationCommandsAsync(properties.ToArray());
             }
             catch (HttpException exception)
@@ -147,49 +129,14 @@ namespace Woofer.Core
 
         private async Task OnButtonExecuted(SocketMessageComponent component)
         {
-            await Task.Run(() =>
-            {
-                Parallel.ForEach(_modules, async module =>
-                {
-                    try
-                    {
-                        await module.HandleButtonExecuted(component);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, ex.Message);
-                    }
-                });
-            });
+            _appModuleManager.InvokeButtonExcecuted(component);
         }
 
         private async Task OnSlashCommandExecuted(SocketSlashCommand command)
         {
-            await Task.Run(() =>
-            {
-                Parallel.ForEach(_modules, async module =>
-                {
-                    try
-                    {
-                        await module.HandleCommand(command);
-                    }
-                    catch (Exception ex)
-                    {
-                        var embed = new EmbedBuilder()
-                            .WithAuthor($"❌ An internal error occured. Please contact bot's administrator.")
-                            .WithColor(Color.Red)
-                            .Build();
+            _logger.LogDebug($"Command received: /{command.CommandName} {string.Join(" ", command.Data.Options.Select(o => $"{o.Name}: {o.Value}"))}");
 
-                        await command.ModifyOriginalResponseAsync((m) =>
-                        {
-                            m.Components = null;
-                            m.Embed = embed;
-                        });
-
-                        _logger.LogError(ex, ex.Message);
-                    }
-                });
-            });
+            _appModuleManager.InvokeOnSlashCommandExecuted(command);
         }
 
         private async void OnApplicationExit(object? sender, EventArgs e)

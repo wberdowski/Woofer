@@ -5,25 +5,23 @@
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>0.1.0-alpha</Version>
+    <AssemblyVersion></AssemblyVersion>
+    <FileVersion></FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Discord.Net" Version="3.9.0-20230302.10" />
-    <PackageReference Include="Discord.Net.Core" Version="3.9.0-build-20230302.10" />
-    <PackageReference Include="Discord.Net.Rest" Version="3.9.0-build-20230302.10" />
-    <PackageReference Include="Discord.Net.Rpc" Version="2.0.0-beta-00860" />
-    <PackageReference Include="Discord.Net.Webhook" Version="3.9.0-build-20230302.10" />
-    <PackageReference Include="Discord.Net.WebSocket" Version="3.9.0-build-20230302.10" />
+    <PackageReference Include="Discord.Net" Version="3.10.0" />
     <PackageReference Include="ManagedBass" Version="3.1.1" />
     <PackageReference Include="ManagedBass.Opus" Version="3.1.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="7.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.1" />
+    <PackageReference Include="Serilog" Version="3.0.0-dev-01927" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="3.1.1-dev-10338" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="4.1.1-dev-00910" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.1-dev-00947" />
     <PackageReference Include="System.Windows.Extensions" Version="7.0.0" />
     <PackageReference Include="YoutubeExplode" Version="6.2.10" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Providers\" />
   </ItemGroup>
 
   <ItemGroup>
