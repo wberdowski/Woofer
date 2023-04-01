@@ -17,6 +17,6 @@ jobs:
       with:
         dotnet-version: 6.0.x
     - name: Restore dependencies
-      run: dotnet restore Woofer.Core
+      run: dotnet restore src/Woofer.Core
     - name: Build
-      run: dotnet build Woofer.Core --no-restore
+      run: dotnet build src/Woofer.Core --no-restore
