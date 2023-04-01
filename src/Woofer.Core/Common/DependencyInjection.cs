@@ -45,6 +45,7 @@ namespace Woofer.Core.Common
         public static IServiceCollection AddBotModules(this IServiceCollection services)
         {
             return services
+                .AddSingleton<AppModuleManager>()
                 .AddSingleton<AppModule, HelpModule>()
                 .AddSingleton<AppModule, AudioPlayerModule>();
         }

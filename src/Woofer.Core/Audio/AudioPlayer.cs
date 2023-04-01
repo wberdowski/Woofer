@@ -186,7 +186,7 @@ namespace Woofer.Core.Audio
 
         private async Task WaitForPlaybackTaskFinished()
         {
-            if (_playbackTask != null /*&& (_playbackCts != null && !_playbackCts.IsCancellationRequested)*/)
+            if (_playbackTask != null)
             {
                 _logger.LogDebug("Stopping task.");
                 await _playbackTask;

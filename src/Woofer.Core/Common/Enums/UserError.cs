@@ -5,7 +5,7 @@
         NoTrackIsCurrentlyPlaying,
         UserNotInTheChannel,
         CommandUnavailableInDms,
-        InvalidIndex,
+        InvalidTrackPosition,
         TrackNotFound
     }
 }

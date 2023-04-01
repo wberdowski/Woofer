@@ -14,9 +14,7 @@ namespace Woofer.Core.Modules
         private readonly SearchProvider _searchProvider;
         private readonly AudioPlayerManager _audioPlayerManager;
         private readonly ILogger _logger;
-        private SocketSlashCommand? _lastAddToQueueMessage;
-        private Embed? _lastAddToQueueMessageEmbed;
-        private Track? _lastAddToQueueMessageTrack;
+        private PlayMessageInfo? _lastPlayMessage;
 
         public AudioPlayerModule(AudioPlayerManager audioPlayerManager, ILogger<AudioPlayerModule> logger, SearchProvider searchProvider)
         {
@@ -25,7 +23,7 @@ namespace Woofer.Core.Modules
             _searchProvider = searchProvider;
         }
 
-        public override Task<IEnumerable<ApplicationCommandProperties>> RegisterCommands()
+        public override IEnumerable<ApplicationCommandProperties> RegisterCommands()
         {
             RegisterCommand("play", "Play an audio track from YouTube.", HandlePlayCommand, new SlashCommandBuilder()
                 .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
@@ -50,7 +48,7 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            if (_lastAddToQueueMessage == null || _lastAddToQueueMessageEmbed == null || _lastAddToQueueMessageTrack == null)
+            if (_lastPlayMessage == null)
             {
                 return;
             }
@@ -58,9 +56,9 @@ namespace Woofer.Core.Modules
             switch (component.Data.CustomId)
             {
                 case "play-now-button":
-                    if (await audioPlayer.TryPlayNow(_lastAddToQueueMessageTrack))
+                    if (await audioPlayer.TryPlayNow(_lastPlayMessage.Track))
                     {
-                        await TryRevokeLastMessageControls();
+                        _lastPlayMessage?.TryRevokeControls().Wait();
                         break;
                     }
 
@@ -69,9 +67,9 @@ namespace Woofer.Core.Modules
                     break;
 
                 case "play-next-button":
-                    if (await audioPlayer.TryEnqueueNext(_lastAddToQueueMessageTrack))
+                    if (await audioPlayer.TryEnqueueNext(_lastPlayMessage.Track))
                     {
-                        await TryRevokeLastMessageControls();
+                        _lastPlayMessage?.TryRevokeControls().Wait();
                         break;
                     }
 
@@ -80,8 +78,8 @@ namespace Woofer.Core.Modules
                     break;
 
                 case "delete-button":
-                    await audioPlayer.Delete(_lastAddToQueueMessageTrack);
-                    await TryRevokeLastMessageControls();
+                    await audioPlayer.Delete(_lastPlayMessage.Track);
+                    await _lastPlayMessage.Interaction.DeleteOriginalResponseAsync();
                     break;
             }
         }
@@ -97,7 +95,7 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             var searchQuery = command.Data.Options.First().Value.ToString();
 
@@ -138,9 +136,7 @@ namespace Woofer.Core.Modules
                     p.Components = components;
                 });
 
-                _lastAddToQueueMessage = command;
-                _lastAddToQueueMessageEmbed = embed;
-                _lastAddToQueueMessageTrack = track;
+                _lastPlayMessage = new PlayMessageInfo(command, embed, track);
             }
 
             var audioPlayer = await _audioPlayerManager.RequestAudioPlayerAtChannel((ulong)command.GuildId, channel);
@@ -155,15 +151,15 @@ namespace Woofer.Core.Modules
                 return;
             }
 
-            var index = command.Data.Options.FirstOrDefault()?.Value as int?;
+            var index = command.Data.Options.FirstOrDefault()?.Value as long?;
 
-            if (index == null)
+            if (index == null || index < 1)
             {
-                await command.RespondWithUserError(UserError.InvalidIndex);
+                await command.RespondWithUserError(UserError.InvalidTrackPosition);
                 return;
             }
 
-            var track = audioPlayer.TrackQueue.ElementAtOrDefault((int)index);
+            var track = audioPlayer.TrackQueue.ElementAtOrDefault((int)index - 1);
 
             if (track == null)
             {
@@ -174,7 +170,7 @@ namespace Woofer.Core.Modules
             await audioPlayer.Delete(track);
 
             var embed = new EmbedBuilder()
-               .WithDescription($"❌ Deleting \"**{track?.Title}**\"")
+               .WithDescription($"🗑 Deleting \"**{track?.Title}**\"")
                .WithColor(Color.DarkPurple)
                .Build();
 
@@ -186,7 +182,7 @@ namespace Woofer.Core.Modules
 
         private async Task HandleStopCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             if (!TryGetActivePlayer(command, out var audioPlayer))
             {
@@ -208,7 +204,7 @@ namespace Woofer.Core.Modules
 
         private async Task HandleSkipCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             if (!TryGetActivePlayer(command, out var audioPlayer))
             {
@@ -230,7 +226,7 @@ namespace Woofer.Core.Modules
 
         private async Task HandlePauseCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             if (!TryGetActivePlayer(command, out var audioPlayer))
             {
@@ -258,7 +254,7 @@ namespace Woofer.Core.Modules
 
         private async Task HandleResumeCommand(SocketSlashCommand command)
         {
-            await TryRevokeLastMessageControls();
+            _lastPlayMessage?.TryRevokeControls().Wait();
 
             if (!TryGetActivePlayer(command, out var audioPlayer))
             {
@@ -298,11 +294,16 @@ namespace Woofer.Core.Modules
 
             var queue = string.Join("\n", audioPlayer.TrackQueue.Select((song, i) =>
             {
-                return $"{i + 1} - {song.Title} {song.Duration} - {song.AudioSource.Codec} {song.AudioSource.Bitrate} kbps - {song.Id}``";
+                return $"> *{i + 1}* - ``{song.Duration}`` - **{song.Title}**\n";
             }));
 
+            if (!audioPlayer.TrackQueue.Any())
+            {
+                queue = "No tracks in the queue.";
+            }
+
             var embedBuilder = new EmbedBuilder()
-                .WithAuthor($"🎵 NOW PLAYING")
+                .WithAuthor($"🎵 Now playing:")
                 .WithDescription($"**☰ Queue**\n{queue}")
                 .WithColor(Color.DarkPurple)
                 .WithFooter($"Total duration: {totalDuration}");
@@ -317,7 +318,7 @@ namespace Woofer.Core.Modules
             else
             {
                 embedBuilder = embedBuilder
-                    .WithTitle($"❌ No track is currently playing");
+                    .WithTitle($"Nothing is currently playing 😴");
             }
 
             var embed = embedBuilder.Build();
@@ -346,26 +347,6 @@ namespace Woofer.Core.Modules
                 embeds: new Embed[] { embed },
                 ephemeral: true
             );
-        }
-
-        private async Task<bool> TryRevokeLastMessageControls()
-        {
-            if (_lastAddToQueueMessage != null && _lastAddToQueueMessageEmbed != null && _lastAddToQueueMessageTrack != null)
-            {
-                await _lastAddToQueueMessage.ModifyOriginalResponseAsync(m =>
-                {
-                    m.Embed = _lastAddToQueueMessageEmbed;
-                    m.Components = null;
-                });
-
-                _lastAddToQueueMessage = null;
-                _lastAddToQueueMessageEmbed = null;
-                _lastAddToQueueMessageTrack = null;
-
-                return true;
-            }
-
-            return false;
         }
     }
 }

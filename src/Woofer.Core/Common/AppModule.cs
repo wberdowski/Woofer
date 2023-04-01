@@ -16,13 +16,13 @@ namespace Woofer.Core.Common
             }
         }
 
-        public virtual Task<IEnumerable<ApplicationCommandProperties>> RegisterCommands()
+        public virtual IEnumerable<ApplicationCommandProperties> RegisterCommands()
         {
             var properties = RegisteredModuleCommands
                 .Select(cmd => cmd.Value.CommandProperties)
                 .Cast<ApplicationCommandProperties>();
 
-            return Task.FromResult(properties);
+            return properties;
         }
 
         public virtual async Task HandleButtonExecuted(SocketMessageComponent component)

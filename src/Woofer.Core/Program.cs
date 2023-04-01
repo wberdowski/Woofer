@@ -17,11 +17,16 @@ namespace Woofer.Core
         private ConfigManager _configManager;
         private DiscordSocketClient _client;
         private ILogger _logger;
-        private IEnumerable<AppModule> _modules;
+        private readonly AppModuleManager _appModuleManager;
 
         public Program()
         {
             _serviceProvider = CreateServices();
+
+            _logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
+            _configManager = _serviceProvider.GetRequiredService<ConfigManager>();
+            _appModuleManager = _serviceProvider.GetRequiredService<AppModuleManager>();
+
         }
 
         private IServiceProvider CreateServices()
@@ -44,15 +49,13 @@ namespace Woofer.Core
                 Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
             }
 
-            SetupLogging();
-
             var version = AssemblyHelper.GetVersion();
             _logger.LogInformation($"Woofer v{version}");
 
             try
             {
+                _appModuleManager.LoadModules();
                 await SetupConfig();
-                SetupModules();
                 await SetupDiscord();
             }
             catch (Exception ex)
@@ -65,14 +68,8 @@ namespace Woofer.Core
             await Task.Delay(Timeout.Infinite);
         }
 
-        private void SetupLogging()
-        {
-            _logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
-        }
-
         private async Task SetupConfig()
         {
-            _configManager = _serviceProvider.GetRequiredService<ConfigManager>();
             await _configManager.Load();
 
             if (_configManager.Config == null)
@@ -98,12 +95,6 @@ namespace Woofer.Core
             await _client.StartAsync();
         }
 
-        private void SetupModules()
-        {
-            _modules = (IEnumerable<AppModule>)_serviceProvider.GetServices(typeof(AppModule));
-            _logger.LogDebug($"{_modules.Count()} module(s) loaded.");
-        }
-
         private Task Log(LogMessage msg)
         {
             var severity = msg.Severity switch
@@ -125,15 +116,7 @@ namespace Woofer.Core
         {
             try
             {
-
-                var properties = new List<ApplicationCommandProperties>();
-
-                foreach (var module in _modules)
-                {
-                    var commands = await module.RegisterCommands();
-                    properties.AddRange(commands);
-                }
-
+                var properties = _appModuleManager.GetRegisteredCommands();
                 await _client.BulkOverwriteGlobalApplicationCommandsAsync(properties.ToArray());
             }
             catch (HttpException exception)
@@ -147,17 +130,7 @@ namespace Woofer.Core
         {
             await Task.Run(() =>
             {
-                Parallel.ForEach(_modules, async module =>
-                {
-                    try
-                    {
-                        await module.HandleButtonExecuted(component);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, ex.Message);
-                    }
-                });
+                _appModuleManager.RelayOnButtonExcecutedEvent(component);
             });
         }
 
@@ -167,28 +140,7 @@ namespace Woofer.Core
 
             await Task.Run(() =>
             {
-                Parallel.ForEach(_modules, async module =>
-                {
-                    try
-                    {
-                        await module.HandleCommand(command);
-                    }
-                    catch (Exception ex)
-                    {
-                        var embed = new EmbedBuilder()
-                            .WithAuthor($"❌ An internal error occured. Please contact bot's administrator.")
-                            .WithColor(Color.Red)
-                            .Build();
-
-                        await command.ModifyOriginalResponseAsync((m) =>
-                        {
-                            m.Components = null;
-                            m.Embed = embed;
-                        });
-
-                        _logger.LogError(ex, ex.Message);
-                    }
-                });
+                _appModuleManager.RelayOnSlashCommandExecutedEvent(command);
             });
         }
 
