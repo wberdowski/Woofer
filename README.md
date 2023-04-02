@@ -5,9 +5,11 @@ Woofer is a self-hosted Discord music bot built using [Discord.Net](https://gith
 > **Warning** Please note that this project is currently in an ***early stage of development (alpha)***. While the bot is functional and has been tested, it may contain bugs or unexpected behavior. If you encounter any issues or bugs, please report them under the [Issues](https://github.com/wberdowski/Woofer/issues) tab in the project repository.
 
 ## Features
-- ✔️ Self-hosted for complete control and privacy
-- ✔️ Runs both on Windows and Linux platforms
-- ✔️ High-quality audio playback from YouTube
+✔️ Self-hosted for complete control and privacy
+
+✔️ Runs both on Windows and Linux platforms
+
+✔️ High-quality audio playback from YouTube
 
 > **Note** More features coming very soon...
 
