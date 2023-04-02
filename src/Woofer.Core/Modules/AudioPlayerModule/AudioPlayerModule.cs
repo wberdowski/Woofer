@@ -1,7 +1,7 @@
 ﻿using Discord;
 using Discord.Interactions;
+using Woofer.Core.Enums;
 using Woofer.Core.Extensions;
-using Woofer.Core.Modules.Common.Enums;
 
 namespace Woofer.Core.Modules.AudioPlayerModule
 {

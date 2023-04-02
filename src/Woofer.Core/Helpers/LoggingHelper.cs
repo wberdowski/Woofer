@@ -2,7 +2,7 @@
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 
-namespace Woofer.Core.Common
+namespace Woofer.Core.Helpers
 {
     internal static class LoggingHelper
     {

@@ -1,6 +1,6 @@
 ﻿using Discord;
 using System.Text.RegularExpressions;
-using Woofer.Core.Modules.Common.Enums;
+using Woofer.Core.Enums;
 
 namespace Woofer.Core.Extensions
 {
