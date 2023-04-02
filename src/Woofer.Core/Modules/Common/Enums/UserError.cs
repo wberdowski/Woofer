@@ -6,6 +6,7 @@
         UserNotInTheChannel,
         CommandUnavailableInDms,
         InvalidTrackPosition,
-        TrackNotFound
+        TrackNotFound,
+        NoAudioPlayerFound
     }
 }

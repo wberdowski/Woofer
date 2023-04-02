@@ -1,10 +1,9 @@
 ﻿using Discord;
+using Discord.Interactions;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using System.Reflection;
 using Woofer.Core.Config;
-using Woofer.Core.Interfaces;
 using Woofer.Core.Modules.AudioPlayerModule;
 using YoutubeExplode;
 
@@ -32,8 +31,7 @@ namespace Woofer.Core.Common
                 .AddConfig()
                 .AddDiscord()
                 .AddSearchServices()
-                .AddAudio()
-                .AddBotModules();
+                .AddAudio();
         }
 
         public static IServiceCollection AddAudio(this IServiceCollection services)
@@ -41,24 +39,6 @@ namespace Woofer.Core.Common
             return services
                 .AddSingleton<AudioPlayerManager>()
                 .AddScoped<AudioPlayer>();
-        }
-
-        public static IServiceCollection AddBotModules(this IServiceCollection services)
-        {
-            var moduleTypes = Assembly.GetExecutingAssembly()
-                .GetTypes()
-                .Where(t =>
-                    t.BaseType != null &&
-                    t.BaseType.IsGenericType &&
-                    t.BaseType.GetGenericTypeDefinition() == typeof(AppModule<>)
-                );
-
-            foreach (var moduleType in moduleTypes)
-            {
-                services = services.AddSingleton(typeof(IAppModule), moduleType);
-            }
-
-            return services.AddSingleton<AppModuleManager>();
         }
 
         public static IServiceCollection AddSearchServices(this IServiceCollection services)
@@ -76,7 +56,8 @@ namespace Woofer.Core.Common
             };
 
             return services.AddSingleton(config)
-                .AddSingleton<DiscordSocketClient>();
+                .AddSingleton<DiscordSocketClient>()
+                .AddSingleton(x => new InteractionService(x.GetRequiredService<DiscordSocketClient>()));
         }
 
         private static IServiceCollection AddConfig(this IServiceCollection services)

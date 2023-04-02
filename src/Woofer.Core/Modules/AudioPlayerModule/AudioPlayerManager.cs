@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Woofer.Core.Modules.AudioPlayerModule
 {
-    internal class AudioPlayerManager
+    public class AudioPlayerManager : IDisposable
     {
         private readonly Dictionary<ulong, AudioPlayer> _audioPlayers;
         private readonly DiscordSocketClient _client;
@@ -54,6 +54,8 @@ namespace Woofer.Core.Modules.AudioPlayerModule
 
             if (!await IsAudioPlayerConnected(channel))
             {
+                await audioPlayer.DisconnectAndDispose();
+
                 _logger.LogDebug("Change channel.");
                 var audioClient = await channel.ConnectAsync(true);
                 await audioPlayer.SetAudioClient(audioClient);
@@ -72,12 +74,18 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             return null;
         }
 
-        public async Task DisposeAudioPlayer(ulong guildId)
+        public void DisconnectAudioPlayer(AudioPlayer player)
         {
-            if (_audioPlayers.TryGetValue(guildId, out var player))
+            player?.DisconnectAndDispose();
+
+            var guilds = _audioPlayers
+                .Where(x => x.Value == player)
+                .Select(x => x.Key)
+                .ToList();
+
+            foreach (var guild in guilds)
             {
-                player?.Dispose();
-                _audioPlayers.Remove(guildId);
+                _audioPlayers.Remove(guild);
             }
         }
 
@@ -86,7 +94,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             return await channel.GetUserAsync(_client.CurrentUser.Id) != null;
         }
 
-        ~AudioPlayerManager()
+        public void Dispose()
         {
             Bass.Free();
         }

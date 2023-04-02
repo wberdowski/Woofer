@@ -1,6 +1,6 @@
 ﻿namespace Woofer.Core.Modules.AudioPlayerModule
 {
-    internal class WebSearchResult : Track
+    public class WebSearchResult : Track
     {
         public WebSearchResult(
             string title,

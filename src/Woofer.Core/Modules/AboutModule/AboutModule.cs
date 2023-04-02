@@ -1,43 +1,38 @@
 ﻿using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
-using Microsoft.Extensions.Logging;
+using Serilog;
 using System.Diagnostics;
-using System.Globalization;
-using Woofer.Core.Common;
 using Woofer.Core.Helpers;
 
 namespace Woofer.Core.Modules.HelpModule
 {
-    internal class AboutModule : AppModule<AboutModule>
+    public class AboutModule : InteractionModuleBase<SocketInteractionContext>
     {
-        private readonly AppModuleManager _appModuleManager;
         private readonly DiscordSocketClient _discordSocketClient;
+        private readonly InteractionService _interactionService;
 
-        public AboutModule(ILogger<AboutModule>? logger, AppModuleManager appModuleManager, DiscordSocketClient discordSocketClient) : base(logger)
+        public AboutModule(DiscordSocketClient discordSocketClient, InteractionService interactionService)
         {
-            _appModuleManager = appModuleManager;
             _discordSocketClient = discordSocketClient;
+            _interactionService = interactionService;
         }
 
-        public override IEnumerable<SlashCommandProperties> RegisterCommands()
+        [SlashCommand("about", "Show about section")]
+        public async Task HandleAboutCommand()
         {
-            RegisterCommand("about", "Show about.", HandleAboutCommand);
-            RegisterCommand("help", "Show help.", HandleHelpCommand);
-            RegisterCommand("debug", "Show debugging information.", HandleDebugCommand);
+            var command = (ISlashCommandInteraction)Context.Interaction;
 
-            return base.RegisterCommands();
-        }
-
-        private async Task HandleAboutCommand(SocketSlashCommand command)
-        {
             var embed = new EmbedBuilder()
                 .WithColor(Color.DarkPurple)
                 .WithAuthor("About Woofer")
                 .WithThumbnailUrl("https://imgur.com/t4mYCC4.png")
                 .WithDescription(
+                    $"Woofer is an open-source, self-hosted Discord music bot built using Discord.Net and running on .NET. " +
+                    $"For more details please visit https://github.com/wberdowski/Woofer\n" +
+                    $"\n" +
                     $"Version:\t**{AssemblyHelper.GetVersion()}**\n" +
-                    $"Guilds:\t**{_discordSocketClient.Guilds.Count}**\n" +
+                    $"# of guilds served:\t**{_discordSocketClient.Guilds.Count}**\n" +
                     $"\n" +
                     $"> Type ``/help`` to view all available commands."
                 );
@@ -45,23 +40,26 @@ namespace Woofer.Core.Modules.HelpModule
             await command.RespondAsync(embed: embed.Build(), ephemeral: true);
         }
 
-        private async Task HandleHelpCommand(SocketSlashCommand command)
+        [SlashCommand("help", "Show help")]
+        public async Task HandleHelpCommand()
         {
-            var commands = _appModuleManager.RegisteredCommands;
+            var command = (ISlashCommandInteraction)Context.Interaction;
 
             var embed = new EmbedBuilder()
             .WithColor(Color.DarkPurple)
             .WithAuthor("📋 Commands")
             .WithDescription(
-                string.Join("\n", commands!.Select(c => $"**/{c.Name}** - {c.Description}"))
+                string.Join("\n", _interactionService.SlashCommands.Select(c => $"**/{c.Name}** - {c.Description}"))
             );
 
             await command.RespondAsync(embed: embed.Build(), ephemeral: true);
         }
 
         [RequireOwner]
-        private async Task HandleDebugCommand(SocketSlashCommand command)
+        [SlashCommand("debug", "Show debugging information")]
+        public async Task HandleDebugCommand()
         {
+            var command = (ISlashCommandInteraction)Context.Interaction;
             var proc = Process.GetCurrentProcess();
             var uptime = (DateTime.UtcNow - proc.StartTime.ToUniversalTime());
 
@@ -69,9 +67,11 @@ namespace Woofer.Core.Modules.HelpModule
             .WithColor(Color.DarkPurple)
             .WithAuthor("Debug information")
             .WithDescription(
+                $"Version:\t**{AssemblyHelper.GetVersion()}**\n" +
                 $"Uptime:\t**{Math.Floor(uptime.TotalDays)}d {uptime.Hours}h {uptime.Minutes}m {uptime.Seconds}s**\n" +
                 $"Process:\t**{proc.ProcessName} (PID {proc.Id})**\n" +
-                $"Memory usage:\t**{proc.PrivateMemorySize64 / 1024 / 1024} MB**\n"
+                $"Memory usage:\t**{proc.PrivateMemorySize64 / 1024 / 1024} MB**\n" +
+                $"Runtime version:\t**{Environment.Version}**"
             );
 
             await command.RespondAsync(embed: embed.Build(), ephemeral: true);

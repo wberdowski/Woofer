@@ -5,7 +5,7 @@ using System.Buffers;
 
 namespace Woofer.Core.Modules.AudioPlayerModule
 {
-    internal class AudioPlayer : IDisposable
+    public class AudioPlayer
     {
         public Track? CurrentTrack => _currentTrack;
         public List<Track> TrackQueue => _trackQueue;
@@ -22,6 +22,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
         private readonly List<Track> _trackQueue = new();
         private readonly object _streamLock = new();
         private readonly object _controlLock = new();
+        private const int WaitTimeout = 3000;
 
         public AudioPlayer(ILogger<AudioPlayerManager> logger)
         {
@@ -35,7 +36,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             {
                 lock (_streamLock)
                 {
-                    _audioClient?.StopAsync().Wait();
+                    _audioClient?.StopAsync().Wait(WaitTimeout);
                     _audioClient?.Dispose();
 
                     _audioClient = audioClient;
@@ -51,28 +52,22 @@ namespace Woofer.Core.Modules.AudioPlayerModule
 
         public Task<Track?> Pause()
         {
-            Track? track = null;
-
             lock (_controlLock)
             {
-                track = _currentTrack;
+                var track = _currentTrack;
                 _isPaused.Reset();
+                return Task.FromResult(track);
             }
-
-            return Task.FromResult(track);
         }
 
         public Task<Track?> Unpause()
         {
-            Track? track = null;
-
             lock (_controlLock)
             {
-                track = _currentTrack;
+                var track = _currentTrack;
                 _isPaused.Set();
+                return Task.FromResult(track);
             }
-
-            return Task.FromResult(track);
         }
 
         public async Task Enqueue(Track track)
@@ -83,7 +78,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
 
                 if (_currentTrack == null && _trackQueue.Count == 1)
                 {
-                    TryStopConsumeAndPlay().Wait();
+                    TrySkipAndPlay().Wait(WaitTimeout);
                 }
             }
 
@@ -98,29 +93,29 @@ namespace Woofer.Core.Modules.AudioPlayerModule
                 {
                     TrackQueue.Remove(track);
                     TrackQueue.Insert(0, track);
-                    InternalSkip().Wait();
+                    TrySkipAndPlay().Wait(WaitTimeout);
 
                     return Task.FromResult(true);
                 }
-            }
 
-            return Task.FromResult(false);
+                return Task.FromResult(false);
+            }
         }
 
         public Task<bool> TryEnqueueNext(Track track)
         {
             lock (_controlLock)
             {
-                if (_currentTrack != track)
+                if (_currentTrack != track && _trackQueue.Any() && _trackQueue.First() != track)
                 {
                     TrackQueue.Remove(track);
                     TrackQueue.Insert(0, track);
 
                     return Task.FromResult(true);
                 }
-            }
 
-            return Task.FromResult(false);
+                return Task.FromResult(false);
+            }
         }
 
         public async Task Delete(Track track)
@@ -133,7 +128,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
                 }
                 else
                 {
-                    InternalSkip().Wait();
+                    TrySkipAndPlay().Wait(WaitTimeout);
                 }
             }
 
@@ -142,30 +137,22 @@ namespace Woofer.Core.Modules.AudioPlayerModule
 
         public Task<Track?> Stop()
         {
-            Track? track = null;
-
             lock (_controlLock)
             {
-                track = _currentTrack;
-
-                InternalStop().Wait();
+                var track = _currentTrack;
+                InternalStop().Wait(WaitTimeout);
+                return Task.FromResult(track);
             }
-
-            return Task.FromResult(track);
         }
 
         public Task<Track?> Skip()
         {
-            Track? track = null;
-
             lock (_controlLock)
             {
-                track = _currentTrack;
-
-                InternalSkip().Wait();
+                var track = _currentTrack;
+                TrySkipAndPlay().Wait(WaitTimeout);
+                return Task.FromResult(track);
             }
-
-            return Task.FromResult(track);
         }
 
         private async Task InternalStop()
@@ -176,11 +163,6 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             await WaitForPlaybackTaskFinished();
         }
 
-        private async Task InternalSkip()
-        {
-            await TryStopConsumeAndPlay();
-        }
-
         private void SetCurrentTrack(Track track) => _currentTrack = track;
         private void ClearCurrentTrack() => _currentTrack = null;
 
@@ -188,22 +170,19 @@ namespace Woofer.Core.Modules.AudioPlayerModule
         {
             if (_playbackTask != null)
             {
-                _logger.LogDebug("Stopping task.");
+                _logger.LogDebug("Waiting for playback task to finish.");
                 await _playbackTask;
-                _logger.LogDebug("Task stopped.");
+                _logger.LogDebug("Playback task finished.");
             }
         }
 
-        private async Task TryStopConsumeAndPlay(bool isInvokedByAutoplay = false)
+        private async Task<bool> TrySkipAndPlay()
         {
+            await InternalStop();
+
             if (!TrackQueue.Any())
             {
-                await Task.FromResult(false);
-            }
-
-            if (!isInvokedByAutoplay)
-            {
-                await InternalStop();
+                return false;
             }
 
             var track = TrackQueue.First();
@@ -211,20 +190,29 @@ namespace Woofer.Core.Modules.AudioPlayerModule
 
             _playbackCts = new CancellationTokenSource();
 
-            _logger.LogDebug($"Now playing (Autoplay? {isInvokedByAutoplay}): {track}");
+            _logger.LogDebug($"Now playing: {track}");
 
-            _playbackTask = Task.Run(() =>
+            _playbackTask = Task.Factory.StartNew(() =>
                 StreamTrack(track, _playbackCts.Token),
-                _playbackCts.Token
-            ).ContinueWith((t) =>
+                _playbackCts.Token,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default
+            ).ContinueWith(async (t) =>
             {
+                _playbackTask = null;
+
                 if (t.IsFaulted)
                 {
-                    HandleException(t.Exception);
+                    HandleException(t.Exception!);
+                }
+                else
+                {
+                    // Autoplay
+                    await TrySkipAndPlay();
                 }
             });
 
-            await Task.FromResult(true);
+            return true;
         }
 
         private bool HandleException(Exception ex)
@@ -286,15 +274,23 @@ namespace Woofer.Core.Modules.AudioPlayerModule
                 ClearCurrentTrack();
                 _logger.LogDebug($"Playback ended: {track.Title}");
             }
-
-            TryStopConsumeAndPlay(true);
         }
 
-        public void Dispose()
+        public async Task DisconnectAndDispose()
         {
-            Bass.Free();
-            _outputStream?.Dispose();
-            _outputStream?.Flush();
+            await InternalStop();
+
+            if (_audioClient != null)
+            {
+                await _audioClient.StopAsync();
+                _audioClient.Dispose();
+            }
+
+            if (_outputStream != null)
+            {
+                _outputStream.Flush();
+                _outputStream.Dispose();
+            }
         }
     }
 }

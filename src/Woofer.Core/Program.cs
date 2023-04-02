@@ -1,14 +1,16 @@
 ﻿using Discord;
-using Discord.Net;
+using Discord.Interactions;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Woofer.Core.Common;
 using Woofer.Core.Config;
+using Woofer.Core.Extensions;
 using Woofer.Core.Helpers;
+using Woofer.Core.Modules.AudioPlayerModule;
 
 namespace Woofer.Core
 {
@@ -16,9 +18,10 @@ namespace Woofer.Core
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ConfigManager _configManager;
-        private DiscordSocketClient _client;
+        private DiscordSocketClient? _client;
         private readonly ILogger _logger;
-        private readonly AppModuleManager _appModuleManager;
+        private readonly InteractionService _commands;
+        private readonly AudioPlayerManager _audioPlayerManager;
 
         public Program()
         {
@@ -26,8 +29,8 @@ namespace Woofer.Core
 
             _logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
             _configManager = _serviceProvider.GetRequiredService<ConfigManager>();
-            _appModuleManager = _serviceProvider.GetRequiredService<AppModuleManager>();
-
+            _commands = _serviceProvider.GetRequiredService<InteractionService>();
+            _audioPlayerManager = _serviceProvider.GetRequiredService<AudioPlayerManager>();
         }
 
         private IServiceProvider CreateServices()
@@ -47,7 +50,7 @@ namespace Woofer.Core
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.RealTime;
+                Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.High;
             }
 
             var version = AssemblyHelper.GetVersion();
@@ -55,9 +58,13 @@ namespace Woofer.Core
 
             try
             {
-                _appModuleManager.LoadModules();
                 await SetupConfig();
                 await SetupDiscord();
+
+                await _commands.AddModulesAsync(Assembly.GetEntryAssembly(), _serviceProvider);
+
+                _commands.SlashCommandExecuted += SlashCommandExecuted;
+                _commands.ComponentCommandExecuted += ComponentCommandExecuted;
             }
             catch (Exception ex)
             {
@@ -67,6 +74,82 @@ namespace Woofer.Core
             }
 
             await Task.Delay(Timeout.Infinite);
+        }
+
+        private async Task HandleInteraction(SocketInteraction arg)
+        {
+            try
+            {
+                var ctx = new SocketInteractionContext(_client, arg);
+                await _commands.ExecuteCommandAsync(ctx, _serviceProvider);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex.ToString());
+
+                if (arg.Type == InteractionType.ApplicationCommand)
+                {
+                    await arg.GetOriginalResponseAsync().ContinueWith(async (msg) => await msg.Result.DeleteAsync());
+                }
+            }
+        }
+
+        private async Task ComponentCommandExecuted(ComponentCommandInfo arg1, IInteractionContext arg2, IResult arg3)
+        {
+            if (!arg3.IsSuccess)
+            {
+                switch (arg3.Error)
+                {
+                    case InteractionCommandError.UnmetPrecondition:
+                        // implement
+                        break;
+                    case InteractionCommandError.UnknownCommand:
+                        // implement
+                        break;
+                    case InteractionCommandError.BadArgs:
+                        // implement
+                        break;
+                    case InteractionCommandError.Exception:
+                        // implement
+                        break;
+                    case InteractionCommandError.Unsuccessful:
+                        // implement
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            await Task.CompletedTask;
+        }
+
+        private async Task SlashCommandExecuted(SlashCommandInfo command, IInteractionContext context, IResult result)
+        {
+            if (!result.IsSuccess)
+            {
+                switch (result.Error)
+                {
+                    case InteractionCommandError.UnmetPrecondition:
+                        await context.Interaction.RespondWithUserError(result.ErrorReason);
+                        break;
+                    case InteractionCommandError.UnknownCommand:
+                        // implement
+                        break;
+                    case InteractionCommandError.BadArgs:
+                        // implement
+                        break;
+                    case InteractionCommandError.Exception:
+                        await context.Interaction.RespondWithInternalError(result.ErrorReason);
+                        break;
+                    case InteractionCommandError.Unsuccessful:
+                        // implement
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            await Task.CompletedTask;
         }
 
         private async Task SetupConfig()
@@ -89,10 +172,9 @@ namespace Woofer.Core
             _client = _serviceProvider.GetRequiredService<DiscordSocketClient>();
             _client.Log += Log;
             _client.Ready += OnClientReady;
-            _client.ButtonExecuted += OnButtonExecuted;
-            _client.SlashCommandExecuted += OnSlashCommandExecuted;
+            _client.InteractionCreated += HandleInteraction;
 
-            await _client.LoginAsync(TokenType.Bot, _configManager.Config.BotToken);
+            await _client.LoginAsync(TokenType.Bot, _configManager?.Config?.BotToken);
             await _client.StartAsync();
         }
 
@@ -116,43 +198,30 @@ namespace Woofer.Core
 
         private async Task OnClientReady()
         {
-            try
-            {
-                _appModuleManager.RegisterCommands();
-                await _client.BulkOverwriteGlobalApplicationCommandsAsync(_appModuleManager.RegisteredCommands!.ToArray());
-            }
-            catch (HttpException exception)
-            {
-                var json = JsonConvert.SerializeObject(exception.Errors, Formatting.Indented);
-                _logger.LogError(json);
-            }
-        }
-
-        private async Task OnButtonExecuted(SocketMessageComponent component)
-        {
-            _appModuleManager.InvokeButtonExcecuted(component);
-
-            await Task.CompletedTask;
-        }
-
-        private async Task OnSlashCommandExecuted(SocketSlashCommand command)
-        {
-            _logger.LogDebug($"Command received: /{command.CommandName} {string.Join(" ", command.Data.Options.Select(o => $"{o.Name}: {o.Value}"))}");
-
-            _appModuleManager.InvokeOnSlashCommandExecuted(command);
-
-            await Task.CompletedTask;
+            await _commands.RegisterCommandsToGuildAsync(918118811985653783);
+            await _commands.RegisterCommandsGloballyAsync(true);
         }
 
         private async void OnApplicationExit(object? sender, EventArgs e)
         {
             if (_client != null)
             {
+                _audioPlayerManager.Dispose();
+
                 await _client.StopAsync();
                 await _client.LogoutAsync();
 
                 _client.Dispose();
             }
+        }
+
+        static bool IsDebug()
+        {
+#if DEBUG
+            return true;
+#else
+                return false;
+#endif
         }
     }
 }

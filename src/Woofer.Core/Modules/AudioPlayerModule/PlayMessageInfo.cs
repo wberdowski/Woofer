@@ -2,7 +2,7 @@
 
 namespace Woofer.Core.Modules.AudioPlayerModule
 {
-    internal class PlayMessageInfo
+    public class PlayMessageInfo
     {
         public IDiscordInteraction Interaction { get; set; }
         public Embed Embed { get; set; }

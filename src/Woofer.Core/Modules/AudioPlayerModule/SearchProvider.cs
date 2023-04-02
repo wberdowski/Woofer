@@ -2,7 +2,7 @@
 
 namespace Woofer.Core.Modules.AudioPlayerModule
 {
-    internal class SearchProvider
+    public class SearchProvider
     {
         private readonly YoutubeClient _ytClient;
 
