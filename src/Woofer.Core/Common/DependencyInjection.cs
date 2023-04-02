@@ -57,7 +57,8 @@ namespace Woofer.Core.Common
 
             return services.AddSingleton(config)
                 .AddSingleton<DiscordSocketClient>()
-                .AddSingleton(x => new InteractionService(x.GetRequiredService<DiscordSocketClient>()));
+                .AddSingleton(x => new InteractionService(x.GetRequiredService<DiscordSocketClient>()))
+                .AddSingleton<InteractionHandler>();
         }
 
         private static IServiceCollection AddConfig(this IServiceCollection services)

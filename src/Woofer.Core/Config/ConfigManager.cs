@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 
 namespace Woofer.Core.Config
 {
@@ -24,6 +25,19 @@ namespace Woofer.Core.Config
         {
             var data = JsonSerializer.Serialize(Config, new JsonSerializerOptions() { WriteIndented = true });
             await File.WriteAllTextAsync(ConfigFilePath, data);
+        }
+
+        public void Validate()
+        {
+            if (Config == null)
+            {
+                throw new ValidationException($"Configuration file corrupted.");
+            }
+
+            if (string.IsNullOrEmpty(Config.BotToken))
+            {
+                throw new ValidationException($"Bot token missing. Please input your discord bot token in the config.json file.");
+            }
         }
     }
 }

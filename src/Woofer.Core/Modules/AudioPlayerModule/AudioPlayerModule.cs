@@ -374,7 +374,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             _audioPlayerManager.DisconnectAudioPlayer(audioPlayer);
 
             var embed = new EmbedBuilder()
-               .WithDescription($"🚪 Stopping and leaving the channel")
+               .WithDescription($"👋 Bye!")
                .WithColor(Color.DarkPurple)
                .Build();
 

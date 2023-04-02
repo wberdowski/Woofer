@@ -1,7 +1,6 @@
 ﻿using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
-using Serilog;
 using System.Diagnostics;
 using Woofer.Core.Helpers;
 
