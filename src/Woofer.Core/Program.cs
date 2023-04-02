@@ -198,7 +198,6 @@ namespace Woofer.Core
 
         private async Task OnClientReady()
         {
-            await _commands.RegisterCommandsToGuildAsync(918118811985653783);
             await _commands.RegisterCommandsGloballyAsync(true);
         }
 
