@@ -29,7 +29,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             _pool = ArrayPool<byte>.Create();
         }
 
-        public Task SetAudioClient(IAudioClient audioClient)
+        public async Task SetAudioClient(IAudioClient audioClient)
         {
             lock (_controlLock)
             {
@@ -46,7 +46,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
                 }
             }
 
-            return Task.CompletedTask;
+            await Task.CompletedTask;
         }
 
         public Task<Track?> Pause()

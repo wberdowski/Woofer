@@ -1,7 +1,7 @@
 ﻿using Discord;
+using Discord.Interactions;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
-using Woofer.Core.Attributes;
 using Woofer.Core.Common;
 using Woofer.Core.Modules.Common.Enums;
 using Woofer.Core.Modules.Common.Extensions;
@@ -20,7 +20,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             _searchProvider = searchProvider;
         }
 
-        public override IEnumerable<ApplicationCommandProperties> RegisterCommands()
+        public override IEnumerable<SlashCommandProperties> RegisterCommands()
         {
             RegisterCommand("play", "Play an audio track from YouTube.", HandlePlayCommand, new SlashCommandBuilder()
                 .AddOption("song-title-or-url", ApplicationCommandOptionType.String, "Title or url of the YouTube video.", isRequired: true));
@@ -81,7 +81,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             }
         }
 
-        [RequireGuild]
+        [RequireContext(ContextType.Guild)]
         private async Task HandlePlayCommand(SocketSlashCommand command)
         {
             var channel = (command.User as IGuildUser)?.VoiceChannel;
@@ -140,6 +140,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             await audioPlayer.Enqueue(track);
         }
 
+        [RequireContext(ContextType.Guild)]
         private async Task HandleDeleteCommand(SocketSlashCommand command)
         {
             if (!TryGetActivePlayer(command, out var audioPlayer))
@@ -176,7 +177,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             );
         }
 
-
+        [RequireContext(ContextType.Guild)]
         private async Task HandleStopCommand(SocketSlashCommand command)
         {
             _lastPlayMessage?.TryRevokeControls().Wait();
@@ -199,6 +200,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             );
         }
 
+        [RequireContext(ContextType.Guild)]
         private async Task HandleSkipCommand(SocketSlashCommand command)
         {
             _lastPlayMessage?.TryRevokeControls().Wait();
@@ -221,6 +223,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             );
         }
 
+        [RequireContext(ContextType.Guild)]
         private async Task HandlePauseCommand(SocketSlashCommand command)
         {
             _lastPlayMessage?.TryRevokeControls().Wait();
@@ -249,6 +252,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             );
         }
 
+        [RequireContext(ContextType.Guild)]
         private async Task HandleResumeCommand(SocketSlashCommand command)
         {
             _lastPlayMessage?.TryRevokeControls().Wait();
@@ -276,6 +280,7 @@ namespace Woofer.Core.Modules.AudioPlayerModule
             );
         }
 
+        [RequireContext(ContextType.Guild)]
         private async Task HandleQueueCommand(SocketSlashCommand command)
         {
             if (!TryGetActivePlayer(command, out var audioPlayer))
@@ -328,7 +333,15 @@ namespace Woofer.Core.Modules.AudioPlayerModule
 
         private bool TryGetActivePlayer(IDiscordInteraction context, out AudioPlayer? audioPlayer)
         {
-            audioPlayer = _audioPlayerManager.GetAudioPlayer((ulong)context.GuildId);
+            var guildId = context.GuildId as ulong?;
+
+            if (guildId == null)
+            {
+                audioPlayer = null;
+                return false;
+            }
+
+            audioPlayer = _audioPlayerManager.GetAudioPlayer((ulong)guildId);
 
             return audioPlayer != null;
         }

@@ -1,9 +1,9 @@
 ﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
-using Woofer.Core.Helpers;
 using Woofer.Core.Interfaces;
+using Woofer.Core.Modules.Common.Enums;
+using Woofer.Core.Modules.Common.Extensions;
 using static Woofer.Core.Common.SlashCommandDefinition;
 
 namespace Woofer.Core.Common
@@ -20,18 +20,24 @@ namespace Woofer.Core.Common
 
         public void InvokeHandleCommand(SocketSlashCommand command)
         {
-            if (_registeredModuleCommands.TryGetValue(command.CommandName, out var cmd))
+            if (_registeredModuleCommands.TryGetValue(command.CommandName, out var cmdDefinition))
             {
+                if (cmdDefinition.RequrieGuild && command.GuildId == null)
+                {
+                    Task.Run(async () => await command.RespondWithUserError(UserError.CommandUnavailableInDms));
+                    return;
+                }
+
                 Task.Run(async () =>
                 {
-                    await cmd.Method.Invoke(command);
+                    await cmdDefinition.Method.Invoke(command);
                 }).ContinueWith(t =>
                 {
                     if (t.IsFaulted)
                     {
                         Logger?.LogError(t.Exception?.ToString());
 
-                        TryRespondWithInternalError(command, t.Exception)
+                        command.RespondWithInternalError(t.Exception)
                         .ContinueWith(t =>
                         {
                             if (t.IsFaulted)
@@ -58,16 +64,15 @@ namespace Woofer.Core.Common
             });
         }
 
-        public virtual Task HandleButtonExecuted(SocketMessageComponent component)
+        public virtual async Task HandleButtonExecuted(SocketMessageComponent component)
         {
-            return Task.CompletedTask;
+            await Task.CompletedTask;
         }
 
-        public virtual IEnumerable<ApplicationCommandProperties> RegisterCommands()
+        public virtual IEnumerable<SlashCommandProperties> RegisterCommands()
         {
             var properties = _registeredModuleCommands
-                .Select(cmd => cmd.Value.CommandProperties)
-                .Cast<ApplicationCommandProperties>();
+                .Select(cmd => cmd.Value.CommandProperties);
 
             return properties;
         }
@@ -107,39 +112,6 @@ namespace Woofer.Core.Common
             {
                 throw new ArgumentException($"Command with name \"{name}\" is already registered.");
             }
-        }
-
-        private async Task TryRespondWithInternalError(SocketSlashCommand command, Exception ex)
-        {
-            var details = $"Version: {AssemblyHelper.GetVersion()}\n" +
-                $"Date: {DateTime.UtcNow}\n" +
-                $"OS: {Environment.OSVersion}\n" +
-                $"Memory: {Process.GetCurrentProcess().PrivateMemorySize64 / 1024 / 1024}MB\n" +
-                $"\n" +
-                $"{ex}";
-
-            var embed = new EmbedBuilder()
-                .WithAuthor($"❌ An internal error occured while executing /{command.CommandName} command.")
-                .WithDescription(
-                    $"If this error persists, please report it with all the necessary details at https://github.com/wberdowski/Woofer/issues\n" +
-                    $"```fix\n" +
-                    $"Checksum: {(uint)details.GetHashCode()}\n" +
-                    $"{details}```"
-                )
-                .WithColor(Color.Red)
-                .Build();
-
-            if (!command.HasResponded)
-            {
-                await command.RespondAsync(embed: embed, ephemeral: true);
-                return;
-            }
-
-            await command.ModifyOriginalResponseAsync((m) =>
-            {
-                m.Components = null;
-                m.Embed = embed;
-            });
         }
     }
 }

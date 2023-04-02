@@ -96,7 +96,7 @@ namespace Woofer.Core
             await _client.StartAsync();
         }
 
-        private Task Log(LogMessage msg)
+        private async Task Log(LogMessage msg)
         {
             var severity = msg.Severity switch
             {
@@ -110,15 +110,16 @@ namespace Woofer.Core
             };
 
             _logger.Log(severity, msg.Exception, "[{Source}] {Message}", msg.Source, msg.Message);
-            return Task.CompletedTask;
+
+            await Task.CompletedTask;
         }
 
         private async Task OnClientReady()
         {
             try
             {
-                var properties = _appModuleManager.GetRegisteredCommands();
-                await _client.BulkOverwriteGlobalApplicationCommandsAsync(properties.ToArray());
+                _appModuleManager.RegisterCommands();
+                await _client.BulkOverwriteGlobalApplicationCommandsAsync(_appModuleManager.RegisteredCommands!.ToArray());
             }
             catch (HttpException exception)
             {
@@ -130,6 +131,8 @@ namespace Woofer.Core
         private async Task OnButtonExecuted(SocketMessageComponent component)
         {
             _appModuleManager.InvokeButtonExcecuted(component);
+
+            await Task.CompletedTask;
         }
 
         private async Task OnSlashCommandExecuted(SocketSlashCommand command)
@@ -137,6 +140,8 @@ namespace Woofer.Core
             _logger.LogDebug($"Command received: /{command.CommandName} {string.Join(" ", command.Data.Options.Select(o => $"{o.Name}: {o.Value}"))}");
 
             _appModuleManager.InvokeOnSlashCommandExecuted(command);
+
+            await Task.CompletedTask;
         }
 
         private async void OnApplicationExit(object? sender, EventArgs e)

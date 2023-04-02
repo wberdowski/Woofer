@@ -2,15 +2,17 @@
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Collections.ObjectModel;
 using Woofer.Core.Interfaces;
 
 namespace Woofer.Core.Common
 {
     internal class AppModuleManager
     {
+        public ReadOnlyCollection<SlashCommandProperties>? RegisteredCommands { get; private set; }
+
         private readonly ILogger<AppModuleManager> _logger;
         private readonly IServiceProvider _serviceProvider;
-
         private IEnumerable<IAppModule> _modules;
 
         public AppModuleManager(ILogger<AppModuleManager> logger, IServiceProvider serviceProvider)
@@ -25,17 +27,17 @@ namespace Woofer.Core.Common
             _logger.LogDebug($"{_modules.Count()} module(s) loaded.");
         }
 
-        public ApplicationCommandProperties[] GetRegisteredCommands()
+        public void RegisterCommands()
         {
-            var properties = new List<ApplicationCommandProperties>();
+            var cmds = new List<SlashCommandProperties>();
 
             foreach (var module in _modules)
             {
                 var commands = module.RegisterCommands();
-                properties.AddRange(commands);
+                cmds.AddRange(commands);
             }
 
-            return properties.ToArray();
+            RegisteredCommands = cmds.AsReadOnly();
         }
 
         public void InvokeButtonExcecuted(SocketMessageComponent component)
