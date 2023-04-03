@@ -15,9 +15,18 @@ Woofer is a self-hosted Discord music bot built using [Discord.Net](https://gith
 
 ## Installation
 
-### Linux
+- Download the .NET Runtime 6.0.* from the [official Microsoft website](https://dotnet.microsoft.com/download/dotnet/6.0).
+- Download the latest release of Woofer from [Releases tab](https://github.com/wberdowski/Woofer/releases), and unzip it.
 
-> **Warning** Before running on Linux, first install **libopus-dev** and **libsodium-dev** packages.
+- Windows
+    - Run ``Woofer.Core.exe``.
+
+- Linux
+    - Install packages required for audio streaming and encryption ``sudo apt-get install libopus-dev libsodium-dev``
+    - Run ``/usr/bin/dotnet Woofer.Core.dll``.
+
+- Open the ``config.json`` file and insert your bot token obtained at [Discord Developer Portal](https://discord.com/developers/applications).
+
 ## Usage
 
 Once Woofer is up and running, you can use various slash commands. To see the full list of available commands, use the `/help` command. You can type it either in the text channel that Woofer has access to, or message directly to the bot.
